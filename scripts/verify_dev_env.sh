@@ -65,6 +65,15 @@ reads_own_secret() {  # reads_own_secret servicio archivo
     "${COMPOSE[@]}" exec -T "$1" sh -c "[ \"\$(stat -c '%a %u' /run/secrets/$2)\" = \"600 \$(id -u)\" ] && test -r /run/secrets/$2"
 }
 
+# /data debe ser un volumen con nombre (persiste) y escribible por el UID 10001.
+data_is_volume_and_writable() {
+    local container
+    container="$("${COMPOSE[@]}" ps -q controlplane)"
+    [[ "$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/data"}}{{.Type}}{{end}}{{end}}' "$container")" == "volume" ]] &&
+        "${COMPOSE[@]}" exec -T controlplane sh -c 'test -w /data && [ "$(id -u)" = 10001 ]'
+}
+root_is_read_only() { ! "${COMPOSE[@]}" exec -T controlplane touch /test; }
+
 check "/api/health responde status ok" health_ok
 check "controlplane NO tiene el socket de Docker" no_socket_in_controlplane
 check "el agente no publica puertos" agent_has_no_ports
@@ -75,6 +84,8 @@ check "el agente rechaza peticiones sin token (401)" agent_rejects_no_token
 check "secret con permisos 600 y directorio 700 en el host" secrets_restricted_on_host
 check "controlplane lee su secret (600, propietario su UID)" reads_own_secret controlplane controlplane_token
 check "agent lee su secret (600, propietario su UID)" reads_own_secret agent agent_token
+check "controlplane: /data es un volumen escribible por el UID 10001" data_is_volume_and_writable
+check "controlplane: el sistema de archivos raíz sigue en solo lectura" root_is_read_only
 
 cleanup "${1:-}"
 exit "$FAILED"

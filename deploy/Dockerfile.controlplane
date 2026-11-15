@@ -20,6 +20,12 @@ COPY src ./src
 RUN groupadd --gid 10001 minipaas && \
     useradd --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin minipaas
 
+# Directorio de datos (SQLite). Se crea con el propietario correcto ANTES de `USER`: así el
+# volumen con nombre que se monta aquí se inicializa con ese propietario y el proceso sin
+# privilegios puede escribir. Es lo único escribible del contenedor, junto con /tmp.
+RUN mkdir /data && chown 10001:10001 /data
+ENV MINIPAAS_DB_PATH=/data/minipaas.sqlite3
+
 EXPOSE 8000
 USER 10001:10001
 CMD ["uvicorn", "--factory", "minipaas.controlplane.main:build_app_from_env", "--host", "0.0.0.0", "--port", "8000"]

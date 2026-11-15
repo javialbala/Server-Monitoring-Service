@@ -11,6 +11,11 @@ networks:
   # Red normal, solo para el control plane (necesaria para publicar su puerto en localhost).
   minipaas-public:
 
+volumes:
+  # Base de datos del control plane. Persiste a `down`, `restart` y reconstrucciones de la
+  # imagen; solo `docker compose down -v` (o `docker volume rm`) la borra.
+  minipaas-data:
+
 # Un archivo por componente con el MISMO token: cada uno con permisos 600 y propietario el
 # UID de su contenedor (Compose ignora uid/gid/mode fuera de Swarm). Ver ADR-014 y
 # scripts/prepare_dev_env.sh.
@@ -26,10 +31,12 @@ services:
       context: ..
       dockerfile: deploy/Dockerfile.controlplane
     ports:
-      - "127.0.0.1:8000:8000"   # solo accesible desde esta máquina
+      - "127.0.0.1:${MINIPAAS_PORT:-8000}:8000"   # solo accesible desde esta máquina
     networks: [minipaas-internal, minipaas-public]
     read_only: true              # sistema de archivos raíz de solo lectura
-    tmpfs: [/tmp]                # único sitio escribible, en memoria
+    tmpfs: [/tmp]                # escribible, en memoria
+    volumes:
+      - minipaas-data:/data      # único sitio persistente y escribible (UID 10001)
     cap_drop: [ALL]              # sin capabilities de Linux
     security_opt: ["no-new-privileges:true"]   # impide ganar privilegios (setuid...)
     secrets: [controlplane_token]
