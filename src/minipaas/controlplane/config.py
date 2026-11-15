@@ -34,6 +34,8 @@ class ControlPlaneSettings:
     session_absolute_hours: int = 8
     login_max_failures: int = 5
     login_window_minutes: int = 15
+    # Habilita las entradas de catálogo de prueba (fallos controlados). Solo para tests y E2E.
+    enable_test_catalog: bool = False
 
     def __post_init__(self) -> None:
         for name in (
@@ -57,4 +59,5 @@ class ControlPlaneSettings:
             token_file=token_file,
             db_path=os.environ.get("MINIPAAS_DB_PATH", DEFAULT_DB_PATH),
             cookie_secure=_read_bool("MINIPAAS_COOKIE_SECURE", default=False),
+            enable_test_catalog=_read_bool("MINIPAAS_ENABLE_TEST_CATALOG", default=False),
         )

@@ -91,6 +91,8 @@ def delete_application(
     conn: ConnectionDep,
 ) -> None:
     try:
-        request.app.state.applications.delete(conn, slug, current.user.id, client_ip(request))
+        request.app.state.lifecycle.delete_application(
+            conn, slug, current.user.id, client_ip(request)
+        )
     except ApplicationNotFound:
         raise NOT_FOUND from None

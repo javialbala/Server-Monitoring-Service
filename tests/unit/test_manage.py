@@ -78,11 +78,11 @@ def test_migrate_and_db_version(db_path, monkeypatch, capsys):
     assert run(monkeypatch, "db-version") == 0
     assert "instalada: 0" in capsys.readouterr().out
     assert run(monkeypatch, "migrate") == 0
-    assert "[1]" in capsys.readouterr().out
+    assert "[1, 2]" in capsys.readouterr().out
     assert run(monkeypatch, "migrate") == 0
     assert "ninguna" in capsys.readouterr().out
     assert run(monkeypatch, "db-version") == 0
-    assert "instalada: 1. Última disponible: 1" in capsys.readouterr().out
+    assert "instalada: 2. Última disponible: 2" in capsys.readouterr().out
 
 
 def test_cookie_secure_must_be_boolean(monkeypatch):

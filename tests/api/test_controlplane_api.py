@@ -5,13 +5,17 @@ from conftest import make_settings
 from fastapi.testclient import TestClient
 
 from minipaas.controlplane.agent_client import AgentClient
+from minipaas.controlplane.agent_runtime_client import AgentRuntimeClient
 from minipaas.controlplane.main import create_app
 
 
 def make_client(handler) -> TestClient:
     # Sin `with`: no se ejecuta el arranque (migraciones); /api/health no usa la base de datos.
     agent = AgentClient("http://agent:8001", "t" * 40, transport=httpx.MockTransport(handler))
-    return TestClient(create_app(make_settings(Path("/nonexistent")), agent))
+    runtime = AgentRuntimeClient("http://agent:8001", "t" * 40)
+    return TestClient(
+        create_app(make_settings(Path("/nonexistent")), agent, runtime_client=runtime)
+    )
 
 
 def agent_ok(request: httpx.Request) -> httpx.Response:
@@ -106,8 +110,9 @@ def test_agent_client_closed_on_shutdown(tmp_path):
             await super().aclose()
 
     agent = SpyAgentClient("http://agent:8001", "t" * 40, transport=httpx.MockTransport(agent_ok))
+    runtime = AgentRuntimeClient("http://agent:8001", "t" * 40)
     with TestClient(
-        create_app(make_settings(tmp_path), agent)
+        create_app(make_settings(tmp_path), agent, runtime_client=runtime)
     ):  # el bloque with ejecuta arranque y apagado
         pass
     assert closed == [True]

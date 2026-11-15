@@ -10,6 +10,7 @@ import json
 import sqlite3
 
 from minipaas.controlplane.clock import Clock, to_iso, utc_now
+from minipaas.controlplane.db.connection import transaction
 from minipaas.controlplane.repositories import audit as repo
 
 LOGIN = "auth.login"
@@ -20,6 +21,22 @@ APPLICATION_CREATE = "application.create"
 APPLICATION_UPDATE = "application.update"
 APPLICATION_DELETE = "application.delete"
 DATABASE_MIGRATE = "database.migrate"
+SERVICE_CREATE = "service.create"
+SERVICE_UPDATE = "service.update"
+SERVICE_DELETE = "service.delete"
+DEPLOYMENT_REVISION_CREATE = "deployment.revision_create"
+DEPLOYMENT_REQUEST = "deployment.request"
+DEPLOYMENT_START = "deployment.start"
+DEPLOYMENT_SUCCESS = "deployment.success"
+DEPLOYMENT_FAILURE = "deployment.failure"
+DEPLOYMENT_ROLLBACK_START = "deployment.rollback_start"
+DEPLOYMENT_ROLLBACK_SUCCESS = "deployment.rollback_success"
+DEPLOYMENT_ROLLBACK_FAILURE = "deployment.rollback_failure"
+DEPLOYMENT_INTERRUPTED = "deployment.interrupted"
+APPLICATION_STOP = "application.stop"
+APPLICATION_START = "application.start"
+APPLICATION_RECOVER = "application.recover"
+AGENT_UNREACHABLE = "agent.unreachable"
 
 SUCCESS = "success"
 FAILURE = "failure"
@@ -68,3 +85,28 @@ class AuditService:
             client_ip,
             json.dumps(metadata, sort_keys=True),
         )
+
+    def record_failure(
+        self,
+        conn: sqlite3.Connection,
+        event_type: str,
+        reason: str,
+        *,
+        user_id: int | None = None,
+        resource_type: str | None = None,
+        resource_id: str | None = None,
+        client_ip: str | None = None,
+        metadata: dict | None = None,
+    ) -> None:
+        """Evento de fallo en su PROPIA transacción (la de la operación ya se deshizo)."""
+        with transaction(conn):
+            self.record(
+                conn,
+                event_type,
+                FAILURE,
+                user_id=user_id,
+                resource_type=resource_type,
+                resource_id=resource_id,
+                client_ip=client_ip,
+                metadata={**(metadata or {}), "reason": reason},
+            )

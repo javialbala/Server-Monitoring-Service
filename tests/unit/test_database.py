@@ -25,17 +25,17 @@ def insert_session(conn, user_id, digest="h1"):
 
 def test_creates_directory_and_file(tmp_path):
     db = Database(tmp_path / "nuevo" / "dir" / "x.sqlite3")
-    assert db.initialize() == [1]
+    assert db.initialize() == [1, 2]
     assert (tmp_path / "nuevo" / "dir" / "x.sqlite3").exists()
 
 
 def test_initialize_is_idempotent(tmp_path):
     db = Database(tmp_path / "x.sqlite3")
-    assert db.initialize() == [1]
+    assert db.initialize() == [1, 2]
     assert db.initialize() == []
     conn = db.connect()
-    assert conn.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0] == 1
-    assert migrations.current_version(conn) == 1
+    assert conn.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0] == 2
+    assert migrations.current_version(conn) == 2
 
 
 def test_wal_and_pragmas(conn):

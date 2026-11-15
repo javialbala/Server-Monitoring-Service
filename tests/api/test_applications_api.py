@@ -1,7 +1,17 @@
 import pytest
 
 BASE = "/api/applications"
-FIELDS = {"slug", "name", "description", "status", "status_label", "created_at", "updated_at"}
+FIELDS = {
+    "slug",
+    "name",
+    "description",
+    "status",
+    "status_label",
+    "created_at",
+    "updated_at",
+    "active_revision",
+    "operation_in_progress",
+}
 
 
 def create(logged_in, **body):
