@@ -13,6 +13,9 @@ jobs:
       - uses: astral-sh/setup-uv@v5
       - run: uv python install 3.12
       - run: uv sync --frozen --python 3.12
+      # Las imágenes Docker se construyen con deploy/requirements/*.txt: deben coincidir con uv.lock.
+      - name: Comprobar que deploy/requirements está sincronizado con uv.lock
+        run: bash scripts/export_requirements.sh && git diff --exit-code deploy/requirements
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run pytest -m "not integration" --cov=minipaas
