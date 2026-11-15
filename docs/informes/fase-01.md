@@ -214,14 +214,30 @@ SDK de Docker.
 | `8927b50` | `fase-01-estructura` | `feat: estructura del paquete con control plane y agente mínimos` |
 | `23791cb` | `fase-01-estructura` | `feat: entorno de desarrollo aislado con Docker Compose` |
 | `c277f12` | `fase-01-estructura` | `test: integración continua con ruff y pytest en GitHub Actions` |
-| *(siguiente)* | `fase-01-estructura` | `docs: guía de desarrollo, ADR-013 a 015 e informe de la Fase 1` (contiene este informe; su identificador se consulta con `git log`) |
+| `b355ad4` | `fase-01-estructura` | `docs: guía de desarrollo, ADR-013 a 015 e informe de la Fase 1` |
+| `9d5145d` | `fase-01-estructura` | `security: token con permisos 600 por componente y directorio 700` (revisión) |
+| `15738cc` | `fase-01-estructura` | `feat: imágenes reproducibles a partir de uv.lock con hashes` (revisión) |
+| `12d457f` | `fase-01-estructura` | `docs: revisión de la Fase 1 (permisos del token y reproducibilidad)` |
+| *(siguiente)* | `fase-01-estructura` | `docs: registra los commits de la revisión en el informe de la Fase 1` (contiene esta tabla) |
 
 Otras operaciones: la rama `fase-00-analisis` se fusionó en `main` por *fast-forward* (hasta
 `e7a93fe`) al autorizarse el inicio de la Fase 1; `fase-01-estructura` parte de ese punto.
 
-*Push*: **pendiente**. El remoto sigue sin credenciales HTTPS en este entorno (mismo error que en la
-Fase 0: `could not read Username for 'https://github.com'`). Ramas que hay que subir: `main`,
-`fase-00-analisis` y `fase-01-estructura`.
+Historia: lineal, sin reescrituras ni *push* forzado. Árbol de trabajo limpio tras el último commit.
+
+*Push*: **pendiente**. Último intento real: al cerrar la primera versión de la fase (`could not read
+Username for 'https://github.com': terminal prompts disabled`). En la revisión **no se ha vuelto a
+intentar**; se comprobó sin hacer peticiones que siguen sin existir credenciales: sin
+`credential.helper`, sin CLI `gh`, sin `GH_TOKEN`/`GITHUB_TOKEN` y sin `~/.git-credentials`.
+
+Para ejecutar el CI en GitHub falta:
+
+1. Una credencial con permiso de escritura en `javialbala/server-monitoring-service`: instalar y
+   autenticar `gh` (`gh auth login`), configurar un *token* de acceso personal con un *credential
+   helper*, o autorizar el uso del remoto por SSH (hay una clave en el equipo, no comprobada).
+2. Subir `main`, `fase-00-analisis` y `fase-01-estructura` (`git push -u origin <rama>`; sin
+   `--force`). El *workflow* se ejecuta en cada *push* y *pull request*.
+3. Que GitHub Actions esté habilitado en el repositorio (opción por defecto).
 
 ---
 
