@@ -1,6 +1,7 @@
 # 5. Estrategia de pruebas
 
-> Estado del documento: **aprobado por el equipo (2026-11-15)**. Todavía no existe código ni tests.
+> Estado del documento: **aprobado por el equipo (2026-11-15)**; el apartado 5.5 recoge las pruebas
+> implementadas hasta la Fase 2.
 
 ## 5.1 Niveles de prueba
 
@@ -42,7 +43,22 @@ Cada ejecución relevante se anota en `docs/registro-pruebas.md` con fecha, fase
 real y observaciones. Los informes de fase enlazan esas entradas. No se registra como superada
 ninguna prueba que no se haya ejecutado.
 
-## 5.5 Integración continua (propuesta)
+## 5.5 Pruebas implementadas hasta la Fase 2
+
+| Nivel | Archivos | Qué cubren |
+|---|---|---|
+| Unitarias | `tests/unit/test_database.py`, `test_migrations.py`, `test_repositories.py` | Creación e inicialización idempotente, versión del esquema, migraciones atómicas (una migración con error no deja cambios), versión futura rechazada, claves foráneas, `CHECK`, WAL, rollback |
+| Unitarias | `test_passwords.py`, `test_session_service.py`, `test_rate_limit.py`, `test_audit.py`, `test_slug.py`, `test_manage.py`, `test_settings.py`, `test_secrets.py`, `test_naming.py`, `test_docker_runtime_errors.py` | Argon2id, caducidad absoluta y por inactividad con reloj falso, ventana de intentos, metadatos prohibidos, derivación y validación del slug, CLI de administración, configuración |
+| API | `tests/api/test_auth_api.py`, `test_csrf_api.py`, `test_applications_api.py`, `test_audit_api.py`, `test_persistence_api.py`, `test_controlplane_api.py`, `test_agent_api.py` | Login/logout, cookies, 401/403/409/422/429, CSRF y `Origin`, CRUD de aplicaciones, auditoría sin secretos, persistencia tras recrear la aplicación, cabeceras |
+| Integración | `tests/integration/test_docker_runtime.py` | `ping` contra el Docker local real |
+| Entorno | `scripts/verify_dev_env.sh` | 12 propiedades de aislamiento del entorno Compose |
+| Extremo a extremo | `scripts/e2e_phase2.sh` | Flujo completo contra contenedores reales en un proyecto Compose separado |
+| Panel | Recorrido con Chromium *headless* (herramienta temporal, no versionada) | Login, errores, alta, duplicado, detalle, borrado con diálogo, estado, móvil y modo oscuro, sesión caducada |
+
+Todas las pruebas que tocan la base de datos usan un archivo temporal (`tmp_path`); ninguna usa la
+base de datos de desarrollo.
+
+## 5.6 Integración continua
 
 Un *workflow* de GitHub Actions que ejecute `ruff` y las pruebas unitarias y de API en cada *push* y
 *pull request*. Las pruebas de integración con Docker se ejecutan en local (podrían añadirse a CI

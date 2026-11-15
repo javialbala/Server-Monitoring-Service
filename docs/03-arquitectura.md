@@ -68,6 +68,10 @@ capas artificiales.
 
 ## 3.3 Modelo de dominio
 
+> Este es el **modelo objetivo** de todo el proyecto. Lo que existe realmente en la base de datos
+> tras la Fase 2 está en el apartado 3.10: las tablas de despliegues, servicios y volúmenes se
+> crearán cuando se implemente su funcionalidad.
+
 ```mermaid
 erDiagram
     APPLICATION ||--o{ DEPLOYMENT : "tiene historial de"
@@ -296,3 +300,121 @@ networks:
 
 Las versiones del servidor real (Ubuntu, Docker, puertos ocupados, RAM/CPU) están pendientes de
 recopilar y condicionan la Fase 13.
+
+## 3.10 Implementación de la Fase 2: persistencia, sesión y aplicaciones
+
+> Estado: **implementado y verificado** (2026-11-15).
+
+### Esquema real (migración `0001_initial.sql`)
+
+```mermaid
+erDiagram
+    USERS ||--o{ SESSIONS : "abre"
+    USERS |o--o{ AUDIT_EVENTS : "origina (ON DELETE SET NULL)"
+    APPLICATION_STATUSES ||--o{ APPLICATIONS : "clasifica"
+
+    USERS {
+        int id PK
+        text username UK "3-64, sin distinguir mayúsculas"
+        text password_hash "Argon2id"
+        text created_at
+        text updated_at
+    }
+    SESSIONS {
+        int id PK
+        text token_hash UK "SHA-256 del identificador de la cookie"
+        int user_id FK "ON DELETE CASCADE"
+        text csrf_token "token sincronizador"
+        text created_at
+        text last_seen_at "caducidad por inactividad (30 min)"
+        text expires_at "caducidad absoluta (8 h)"
+        text revoked_at "NULL si sigue activa"
+    }
+    APPLICATION_STATUSES {
+        text code PK "draft"
+        text description "Sin desplegar"
+    }
+    APPLICATIONS {
+        int id PK
+        text slug UK "3-40, inmutable"
+        text name "1-100"
+        text description "0-500"
+        text status FK "draft"
+        text created_at
+        text updated_at
+    }
+    AUDIT_EVENTS {
+        int id PK
+        text occurred_at "UTC"
+        text event_type "auth.login, application.create..."
+        text outcome "success | failure"
+        int user_id FK "nullable"
+        text resource_type "sin FK: sobrevive al borrado"
+        text resource_id
+        text client_ip
+        text metadata "JSON sin datos sensibles"
+    }
+    SCHEMA_MIGRATIONS {
+        int version PK
+        text name
+        text applied_at
+    }
+```
+
+Relaciones: un usuario tiene muchas sesiones (se borran con él); los eventos de auditoría apuntan
+opcionalmente al usuario y guardan el recurso afectado como texto, para conservar el rastro aunque el
+recurso se elimine; cada aplicación tiene un estado lógico de la tabla de códigos (ADR-023). Las
+aplicaciones todavía no se relacionan con usuarios: con un único administrador no aporta nada, y la
+auditoría ya registra quién hizo cada operación. El modelo está preparado para que la Fase 3 añada
+servicios y despliegues que referencien `applications.id`.
+
+### Módulos del control plane
+
+| Capa | Módulos | Responsabilidad |
+|---|---|---|
+| Rutas | `api/health.py`, `api/auth.py`, `api/applications.py`, `api/deps.py` | HTTP: validación de entrada (Pydantic, `schemas.py`), códigos de estado, cookies; dependencias de conexión, sesión y CSRF |
+| Servicios | `services/auth.py`, `services/applications.py`, `services/audit.py` | Casos de uso y reglas: transacciones, auditoría, errores de dominio |
+| Seguridad | `security/passwords.py`, `security/sessions.py`, `security/csrf.py`, `security/rate_limit.py` | Argon2id, sesiones, CSRF y origen, límite de intentos |
+| Datos | `repositories/*.py`, `db/connection.py`, `db/migrations.py`, `db/migrations/*.sql` | SQL explícito, conexiones, transacciones, migraciones |
+| Utilidades | `clock.py`, `config.py`, `manage.py` | Reloj inyectable (tests de caducidad), configuración, CLI de administración |
+
+`main.py` solo ensambla: crea los servicios, aplica las migraciones al arrancar (`lifespan`), registra
+los routers, el middleware de cabeceras y los estáticos. Las rutas no contienen SQL y los repositorios
+no deciden transacciones: las abre el servicio, de modo que la operación y su evento de auditoría de
+éxito se confirman o se deshacen juntos (ADR-022).
+
+### Flujo de inicio de sesión
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor A as Administrador
+    participant P as Panel (JS)
+    participant API as api/auth.py
+    participant S as AuthService
+    participant DB as SQLite
+
+    A->>P: usuario y contraseña
+    P->>API: POST /api/auth/login (JSON)
+    API->>API: comprobar Origin
+    API->>S: login(...)
+    S->>S: ¿bloqueado por intentos? (429)
+    S->>DB: buscar usuario
+    S->>S: Argon2id verify (hash ficticio si no existe)
+    alt credenciales incorrectas
+        S->>DB: auditoría auth.login_failed (transacción propia)
+        API-->>P: 401 mensaje genérico
+    else correctas
+        S->>DB: BEGIN IMMEDIATE, revocar sesión previa, crear sesión (hash), auditoría auth.login, COMMIT
+        API-->>P: 200 csrf_token + Set-Cookie HttpOnly
+    end
+    P->>API: POST /api/applications + X-CSRF-Token
+    API->>DB: sesión válida y token CSRF correcto
+```
+
+### Persistencia en el entorno Docker
+
+La base de datos (`/data/minipaas.sqlite3`, modo WAL) está en el volumen con nombre `minipaas-data` del
+control plane; la imagen crea `/data` con propietario UID 10001 para que el volumen se inicialice con
+los permisos correctos. El sistema de archivos raíz sigue en solo lectura. El agente no cambia en esta
+fase y no tiene acceso a la base de datos.

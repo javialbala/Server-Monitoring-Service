@@ -29,6 +29,17 @@
 | A12 | Token del agente filtrado | Lectura de la configuración | Token generado en la instalación, fuera del repositorio, y el agente sigue aplicando su política aunque la petición venga autenticada. |
 | A13 | Exposición del panel a Internet | Publicar el puerto del panel sin protección | Por defecto escucha solo en `127.0.0.1` o la LAN; HTTPS mediante proxy si se expone (Fase 13). |
 
+### Estado de las mitigaciones tras la Fase 2
+
+| # | Estado | Cómo se ha implementado y verificado |
+|---|---|---|
+| A2 | Implementado y verificado (Fase 1) | El control plane no tiene el socket; `verify_dev_env.sh` lo comprueba |
+| A4 | **Implementado y verificado** | Login obligatorio en todas las rutas privadas; Argon2id (ADR-019); 5 fallos en 15 min → 429 (ADR-024); cookie `HttpOnly`, `SameSite=Strict`; identificador guardado como SHA-256; caducidad de 30 min de inactividad y 8 h absolutas; revocación al cerrar sesión; identificador nuevo en cada login (ADR-018). Tests en `tests/api/test_auth_api.py` y E2E |
+| A5 | **Implementado y verificado** | Token sincronizador por sesión en `X-CSRF-Token` y rechazo de `Origin` ajeno (ADR-021). Tests en `tests/api/test_csrf_api.py` y E2E |
+| A6 | **Implementado y verificado** (frontend) | Datos dinámicos solo con `textContent`/`createElement`; sin `innerHTML`; CSP `default-src 'self'` (comprobado: la CSP bloquea incluso la evaluación de código de la herramienta de pruebas del navegador); `/docs` y `/redoc` desactivados por depender de un CDN |
+| A10 | **Implementado y verificado** (auditoría) | Los metadatos de auditoría rechazan claves sensibles; los fallos de login no guardan el usuario escrito; las modificaciones guardan nombres de campo, no valores. Un test recorre todos los eventos y comprueba que no contienen contraseña, cookie ni token CSRF |
+| A13 | Implementado en desarrollo | Panel solo en `127.0.0.1`; `MINIPAAS_COOKIE_SECURE=true` disponible para HTTPS. La exposición real se decidirá en la Fase 13 |
+
 ## 4.3 Riesgo residual reconocido
 
 - **El agente sigue teniendo el socket de Docker.** Si se compromete el propio agente, se compromete
@@ -37,6 +48,18 @@
   mejora en el servidor (ver ADR-002).
 - **Los contenedores comparten kernel con el host.** Es una limitación inherente a los contenedores
   frente a las máquinas virtuales; debe explicarse en la memoria.
+- **Bloqueo del administrador por terceros (Fase 2).** El límite de intentos también cuenta por
+  nombre de usuario: alguien con acceso a la red del panel puede provocar 5 fallos con el usuario
+  `admin` y bloquear su acceso durante 15 minutos. Es el precio de frenar ataques distribuidos desde
+  varias IP; el panel solo es accesible desde la máquina o la red local, y un reinicio del control
+  plane desbloquea. Se revisará si el panel se expone a Internet.
+- **IP del cliente detrás de un proxy (Fase 2).** El límite por IP y la auditoría usan la IP de la
+  conexión. Si en la Fase 13 se añade un proxy inverso, todas las peticiones parecerán venir del proxy
+  y habrá que tomar la IP de una cabecera de confianza.
+- **Contenido de la base de datos (Fase 2).** El archivo SQLite contiene el hash Argon2id de la
+  contraseña y los tokens CSRF de las sesiones (los identificadores de sesión, solo como SHA-256).
+  Está en un volumen accesible únicamente desde el contenedor del control plane y por root en el host;
+  no se cifra en reposo.
 - **Los volúmenes locales de Docker no tienen cuota de tamaño.** Una aplicación podría llenar el
   disco. Se mostrará el uso por volumen y se alertará; la cuota estricta queda fuera del alcance.
 

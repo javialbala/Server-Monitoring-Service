@@ -7,10 +7,11 @@ Trabajo de la asignatura *Gestión de Sistemas de Archivos y Servicios Distribui
 Título provisional: *«Diseño e implementación de una plataforma PaaS ligera para el despliegue y
 gestión de aplicaciones distribuidas»*.
 
-> **Estado actual: Fase 1 (estructura y entorno aislado) terminada, pendiente de aprobación.**
-> Existen el control plane y el agente en versión mínima: se comunican de forma autenticada y el
-> panel muestra el estado del sistema. **Todavía no se pueden desplegar aplicaciones**; las
-> capacidades descritas abajo son objetivos de las fases siguientes.
+> **Estado actual: Fase 2 (persistencia, aplicaciones, autenticación y auditoría) terminada,
+> pendiente de aprobación.** El panel tiene inicio de sesión de un único administrador y permite
+> registrar, consultar, editar y eliminar aplicaciones, que se guardan en SQLite. **Todavía no se
+> pueden desplegar aplicaciones** (empieza en la Fase 3); las capacidades descritas abajo son
+> objetivos de las fases siguientes.
 
 ## ¿Qué es?
 
@@ -45,12 +46,15 @@ HTML/CSS/JavaScript · Chart.js. Justificación en [docs/decisiones.md](docs/dec
 Requisitos: Linux, Docker Engine con Compose y [uv](https://docs.astral.sh/uv/).
 
 ```bash
-uv sync && uv run pytest -m "not integration"        # tests
+uv sync --all-extras && uv run pytest -m "not integration"   # tests
 bash scripts/prepare_dev_env.sh                      # token y GID de Docker (una vez)
 docker compose --env-file deploy/.env -f deploy/compose.dev.yaml up -d --build --wait
+docker compose --env-file deploy/.env -f deploy/compose.dev.yaml \
+    exec controlplane python -m minipaas.controlplane.manage create-admin --username admin
 ```
 
-Panel: <http://127.0.0.1:8000>. Detalles y verificación del aislamiento en
+Panel: <http://127.0.0.1:8000>. No hay credenciales por defecto: el administrador se crea con la
+última orden, que pide la contraseña sin mostrarla. La API está descrita en [docs/api.md](docs/api.md). Detalles y verificación del aislamiento en
 [docs/guia-desarrollo.md](docs/guia-desarrollo.md). La instalación en el servidor se documentará en
 la Fase 13.
 
@@ -58,4 +62,6 @@ la Fase 13.
 
 La plataforma no usa contenedores privilegiados, no da acceso al socket de Docker al componente
 expuesto a la red, no permite ejecutar comandos arbitrarios y solo actúa sobre recursos etiquetados
-como propios. Ver [docs/04-seguridad.md](docs/04-seguridad.md).
+como propios. El panel exige sesión (contraseñas con Argon2id, sesiones revocables en servidor,
+protección CSRF, límite de intentos) y registra las operaciones en un log de auditoría. Ver
+[docs/04-seguridad.md](docs/04-seguridad.md).

@@ -26,6 +26,15 @@ Estados posibles:
 | 013 | `uv` y `uv.lock` en desarrollo, CI e imágenes (exportado con hashes) | Aceptada (Fase 1, revisada) |
 | 014 | Token compartido como *secret* de archivo: una copia 600 por componente | Aceptada (Fase 1, revisada) |
 | 015 | Python 3.12 en imágenes y CI | Aceptada (Fase 1) |
+| 016 | Migraciones propias: archivos SQL numerados y tabla de versiones | Aceptada (Fase 2) |
+| 017 | Conexiones SQLite por petición, transacciones explícitas y WAL | Aceptada (Fase 2) |
+| 018 | Sesiones en servidor con el identificador guardado como hash | Aceptada (Fase 2) |
+| 019 | Argon2id (argon2-cffi) para las contraseñas | Aceptada (Fase 2) |
+| 020 | Administrador inicial creado por CLI explícita e idempotente | Aceptada (Fase 2) |
+| 021 | CSRF con token sincronizador por sesión + comprobación de `Origin` | Aceptada (Fase 2) |
+| 022 | Auditoría transaccional con metadatos filtrados | Aceptada (Fase 2) |
+| 023 | Estado lógico de la aplicación en tabla de códigos; slug inmutable; borrado definitivo | Aceptada (Fase 2) |
+| 024 | Limitación de intentos de login en memoria | Aceptada (Fase 2) |
 
 ### Historial de aprobaciones
 
@@ -324,3 +333,166 @@ su propio UID. Para producción (Fase 13) se aplicará el mismo esquema.
 **Decisión.** `python:3.12-slim` en las imágenes, Python 3.12 en el CI y en el `.venv` local
 (`requires-python >= 3.12`). Es una versión estable, con soporte de seguridad y con *wheels* para
 todas las dependencias. Lo que se prueba es lo que se ejecuta.
+
+## ADR-016 · Migraciones propias: archivos SQL numerados y tabla de versiones
+
+**Problema.** El esquema de SQLite debe crearse de forma reproducible, evolucionar entre fases y
+permitir saber qué versión está instalada.
+
+**Alternativas.**
+
+| Opción | Ventajas | Inconvenientes |
+|---|---|---|
+| Alembic | Estándar, autogeneración | Pensado para SQLAlchemy (que no usamos, ADR-005); dependencia y conceptos extra |
+| `CREATE TABLE IF NOT EXISTS` al arrancar | Mínimo | No permite cambiar tablas existentes ni saber la versión |
+| **Archivos `NNNN_nombre.sql` + tabla `schema_migrations`** | Cada cambio es SQL legible; versión consultable; ~100 líneas de Python | Hay que escribir a mano las migraciones (incluidas las que reconstruyen tablas) |
+
+**Decisión.** Mecanismo propio. Cada migración se aplica en su propia transacción
+`BEGIN IMMEDIATE`, releyendo la versión dentro de la transacción (dos procesos a la vez no la
+aplican dos veces). No se usa `executescript`, porque hace un `COMMIT` implícito y rompería la
+atomicidad: el SQL se divide en sentencias con `sqlite3.complete_statement`. Si la base de datos tiene
+una versión mayor que la que conoce el código, el control plane no arranca (protección ante una
+vuelta atrás del código). Las migraciones se aplican al arrancar el control plane y también con
+`manage migrate`.
+
+## ADR-017 · Conexiones SQLite por petición, transacciones explícitas y WAL
+
+**Problema.** Varias peticiones simultáneas (y la CLI) usan el mismo archivo sin corromperlo ni
+bloquearse indefinidamente.
+
+**Decisión.**
+
+- Una conexión por petición (dependencia de FastAPI que la abre y siempre la cierra).
+- `isolation_level=None`: el módulo `sqlite3` no abre transacciones implícitas; cada escritura va en
+  una transacción explícita `BEGIN IMMEDIATE … COMMIT/ROLLBACK`. `IMMEDIATE` toma el bloqueo de
+  escritura al empezar, lo que evita errores al «promocionar» una lectura a escritura.
+- `PRAGMA foreign_keys=ON` en cada conexión (no es persistente en SQLite) y `busy_timeout` de 5 s.
+- `journal_mode=WAL`: los lectores no bloquean al escritor; adecuado para un panel con pocas escrituras.
+- La base de datos vive en un **volumen con nombre** (`minipaas-data`, montado en `/data`): sobrevive a
+  `restart`, `down` y reconstrucciones de imagen; solo `down -v` la borra.
+
+**Alternativas descartadas.** Conexión global compartida (requiere serializar el acceso a mano); pool
+de conexiones (innecesario a esta escala); `executescript`/transacciones implícitas (comportamiento
+menos evidente).
+
+## ADR-018 · Sesiones en servidor con el identificador guardado como hash
+
+**Problema.** Mantener la sesión del administrador de forma revocable y sin que una copia de la base
+de datos permita suplantarlo.
+
+**Alternativas.** Cookie firmada sin estado (no se puede revocar de verdad); JWT (mismo problema y más
+complejidad); **sesión en SQLite**.
+
+**Decisión.** Identificador de 256 bits (`secrets.token_urlsafe(32)`) enviado solo en la cookie
+`minipaas_session` (`HttpOnly`, `SameSite=Strict`, `Path=/`, `Secure` configurable para HTTPS,
+`Max-Age` igual a la duración absoluta). En SQLite se guarda **solo su SHA-256**: quien lea la base de
+datos no obtiene cookies válidas. Basta un hash rápido (no Argon2) porque el identificador es aleatorio
+y largo, no adivinable como una contraseña. Caducidad absoluta de 8 h y por inactividad de 30 min;
+revocación al cerrar sesión; el login siempre crea un identificador nuevo y revoca el anterior del
+navegador (evita la fijación de sesión).
+
+## ADR-019 · Argon2id (argon2-cffi) para las contraseñas
+
+**Problema.** Guardar la contraseña del administrador de forma que una filtración de la base de datos
+no permita recuperarla.
+
+**Alternativas.** SHA-256 con sal (demasiado rápido: vulnerable a fuerza bruta); PBKDF2 (biblioteca
+estándar, pero sin dureza de memoria); bcrypt (bueno, pero limita a 72 bytes); **Argon2id**.
+
+**Decisión.** Argon2id mediante `argon2-cffi`, con sus parámetros por defecto (perfil de RFC 9106:
+64 MiB, 3 iteraciones, 4 hilos). Es el algoritmo recomendado por OWASP y ganó la *Password Hashing
+Competition*. Es la única dependencia nueva de la fase: no implementamos criptografía propia y la
+biblioteca estándar no incluye Argon2. Al iniciar sesión se recalcula el hash si los parámetros han
+cambiado. Si el usuario no existe se verifica igualmente contra un hash ficticio para no revelar su
+existencia por el tiempo de respuesta.
+
+**Coste.** Cada verificación usa unos 64 MiB de memoria durante una fracción de segundo; aceptable con
+un único administrador y con el limitador de intentos (ADR-024).
+
+## ADR-020 · Administrador inicial creado por CLI explícita e idempotente
+
+**Problema.** Crear el primer administrador sin contraseñas por defecto, sin credenciales en el código
+y sin exponer la contraseña.
+
+**Alternativas.**
+
+| Opción | Problema |
+|---|---|
+| Usuario/contraseña por defecto | Prohibido; el típico fallo de seguridad |
+| Variable de entorno con la contraseña | Visible con `docker inspect` (mismo motivo que ADR-014) |
+| Asistente web «primer arranque» | Quien llegue primero al panel se queda con él |
+| *Secret* de archivo generado | El token de la Fase 1 no es legible por el usuario del host (ADR-014); habría que mostrarle la contraseña de algún modo |
+| **CLI dentro del contenedor (`manage create-admin`)** | Requiere acceso a la terminal del servidor, que es justo quien debe poder crearlo |
+
+**Decisión.** `python -m minipaas.controlplane.manage create-admin --username <u>` ejecutado con
+`docker compose exec`. La contraseña se pide con `getpass` (dos veces) o se lee de la entrada estándar
+con `--password-stdin` (para scripts); **nunca** como argumento, porque quedaría en el historial y en
+la lista de procesos. Si ya existe un administrador, termina con código 1 y no modifica nada. Se
+registra el evento `admin.create`. El panel muestra el comando cuando aún no hay administrador
+(`setup_required`), sin revelar nada más.
+
+## ADR-021 · CSRF con token sincronizador por sesión + comprobación de `Origin`
+
+**Problema.** Con autenticación por cookie, otra web podría hacer que el navegador del administrador
+envíe peticiones que modifican datos.
+
+**Alternativas.** Solo `SameSite` (no protege frente a subdominios del mismo sitio ni en todos los
+navegadores); *double-submit cookie* (requiere una cookie legible por JS); **token sincronizador**.
+
+**Decisión.** Cada sesión tiene un token CSRF aleatorio guardado en servidor. El frontend lo recibe en
+el JSON de `login` y de `GET /api/auth/session`, lo guarda solo en memoria y lo envía en la cabecera
+`X-CSRF-Token` en `POST`/`PATCH`/`DELETE`; el servidor lo compara en tiempo constante (403 si falta o
+no coincide). Como defensa adicional, cualquier petición no segura (incluido el login, que aún no tiene
+sesión) con cabecera `Origin` ajena se rechaza. Las peticiones `GET` nunca modifican datos de negocio.
+Una web ajena no puede leer el token porque no hay cabeceras CORS que lo permitan.
+
+## ADR-022 · Auditoría transaccional con metadatos filtrados
+
+**Problema.** Registrar las operaciones relevantes sin almacenar secretos y sin que una operación
+fallida deje un registro de éxito.
+
+**Decisión.**
+
+- Tabla `audit_events` (tipo, fecha UTC, resultado `success`/`failure`, usuario, recurso, IP,
+  metadatos JSON).
+- Los eventos de **éxito** se escriben **en la misma transacción** que la operación: si la operación
+  falla, el `ROLLBACK` elimina también el evento. Los de **fallo** se escriben después, en una
+  transacción aparte.
+- El recurso se guarda como texto (`resource_type`, `resource_id`) sin clave foránea, para que el
+  evento sobreviva al borrado del recurso; el usuario es clave foránea con `ON DELETE SET NULL`.
+- Los metadatos solo admiten valores simples y rechazan claves que contengan `password`, `token`,
+  `csrf`, `cookie`, `secret`, `authorization` o `session` (error de programación detectado en tests).
+- Los intentos de login fallidos no guardan el usuario escrito (podría ser una contraseña tecleada en
+  el campo equivocado); las modificaciones guardan los nombres de los campos cambiados, no sus valores.
+
+## ADR-023 · Estado lógico en tabla de códigos; slug inmutable; borrado definitivo
+
+**Estado lógico.** En esta fase una aplicación solo puede estar **registrada sin desplegar**
+(`draft`). No se inventan estados de ejecución: los estados del ciclo de vida se añadirán cuando
+existan los despliegues (Fase 3–4). Se guarda como clave foránea a `application_statuses` en lugar de
+un `CHECK`, porque en SQLite cambiar un `CHECK` exige reconstruir la tabla y añadir un código es un
+simple `INSERT` en una migración. El estado lógico (qué quiere el usuario) se mantendrá separado del
+estado real de los contenedores, que se consultará a Docker.
+
+**Slug.** Identificador legible (`^[a-z][a-z0-9-]{1,38}[a-z0-9]$`, sin `--`), derivado del nombre si
+no se indica. Es **inmutable** porque en la Fase 3 formará parte de los nombres de redes, volúmenes y
+contenedores (`minipaas-<slug>-…`): cambiarlo obligaría a renombrar recursos Docker.
+
+**Borrado.** Definitivo (no lógico): en esta fase una aplicación no tiene recursos asociados que
+limpiar, y el evento de auditoría conserva el rastro. La Fase 3 revisará el borrado cuando haya
+contenedores y volúmenes (relacionado con RF-19).
+
+## ADR-024 · Limitación de intentos de login en memoria
+
+**Problema.** Impedir la fuerza bruta contra el formulario de acceso.
+
+**Decisión.** Ventana deslizante en memoria: tras 5 fallos en 15 minutos, por IP **o** por nombre de
+usuario, se responde 429 con `Retry-After` (incluso si la contraseña es correcta) hasta que expire la
+ventana. Un acceso correcto reinicia el contador del usuario.
+
+**Alternativas.** Tabla en SQLite (sobrevive a reinicios, pero añade escrituras y limpieza); proxy
+externo (fail2ban, etc.; fuera del alcance).
+
+**Limitaciones aceptadas.** El contador se pierde al reiniciar el control plane (el atacante no puede
+provocar ese reinicio) y solo es válido con un único proceso de uvicorn, que es la configuración del
+proyecto. Detrás de un proxy inverso habrá que tomar la IP real de una cabecera de confianza.

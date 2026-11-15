@@ -78,3 +78,39 @@ Pendiente: ejecución del CI en GitHub (requiere *push*); revisión visual del p
 | 1.25 | Credenciales para *push* (sin intentarlo) | `git config credential.helper`, `command -v gh`, variables `GH_TOKEN`/`GITHUB_TOKEN`, `~/.git-credentials` | Ninguna disponible. No se intentó el *push* |
 
 No ejecutado: CI en GitHub (requiere *push*); revisión visual del panel.
+
+## Fase 2 — Persistencia, aplicaciones, autenticación y auditoría (2026-11-15)
+
+Entorno: Python 3.12 (`.venv`, `uv sync --all-extras`), Docker 29.9.2, Compose 5.6.1. Todas las
+pruebas que usan base de datos emplean archivos temporales o proyectos Compose separados
+(`minipaas-e2e`, `minipaas-ui`); la base de datos de desarrollo no se ha usado para pruebas.
+
+| # | Prueba | Comando / procedimiento | Resultado real |
+|---|---|---|---|
+| 2.1 | Estilo y análisis estático | `uv run ruff check .`; `uv run ruff format --check .` | `All checks passed!`; 77 archivos formateados |
+| 2.2 | Suite completa (unitarias, API e integración) | `uv run pytest` | **214 passed** (213 + 1 de integración), ~16–21 s (Argon2 real). 1 aviso de deprecación de Starlette (no es un fallo) |
+| 2.3 | Unitarias y API con cobertura | `uv run pytest -m "not integration" --cov=minipaas` | 212 passed antes del último cambio (cobertura total **98 %**, 964 sentencias, 15 sin cubrir); tras desactivar `/docs` y `/redoc`, 213 passed |
+| 2.4 | Integración con Docker | `uv run pytest -m integration` | 1 passed |
+| 2.5 | Dependencias por componente | `uv lock`; `bash scripts/export_requirements.sh`; inspección de `deploy/requirements/*.txt` y de las imágenes con `importlib.util.find_spec` | El agente **no** contiene `argon2` ni `httpx` (sí `docker`); el control plane contiene `argon2` y **no** `docker`. Imagen del agente 206 MB (211 MB antes de separar extras) |
+| 2.6 | Aislamiento del entorno | `bash scripts/verify_dev_env.sh` | **12/12 OK**: las 10 anteriores + `/data` es un volumen escribible por el UID 10001 + la raíz sigue en solo lectura |
+| 2.7 | Extremo a extremo con contenedores reales | `bash scripts/e2e_phase2.sh` | **12/12 OK** («E2E correcto.»): crear administrador; segundo `create-admin` falla; login; 401 sin cookie; 403 sin CSRF; 201 con CSRF; `down` + `up`; la aplicación persiste; la sesión persiste; logout 204; la cookie antigua da 401. Después: 0 contenedores, 0 volúmenes y 0 imágenes `minipaas-e2e` |
+| 2.8 | Recorrido del panel en navegador | Chromium *headless* + Playwright (herramienta temporal ejecutada con `uvx`, fuera del proyecto) contra un proyecto Compose separado `minipaas-ui` (puerto 8020) con un administrador de contraseña aleatoria | Ruta privada sin sesión → login; contraseña incorrecta → «Usuario o contraseña incorrectos»; login → lista; alta de dos aplicaciones; nombre repetido → «Ya existe una aplicación con ese identificador» en el campo; detalle; diálogo de borrado → borrada y vuelta a la lista; estado del sistema; móvil 390 px en modo oscuro sin desbordamiento horizontal; logout; sesión revocada desde otra pestaña → login con «Tu sesión ha caducado». Sin errores de JavaScript. Proyecto eliminado después (`down -v --rmi local`) |
+| 2.9 | CSP efectiva | Mismo recorrido | La CSP `default-src 'self'` bloqueó el `eval` interno de la herramienta (`wait_for_function`): «violates the following Content Security Policy directive… 'unsafe-eval'». Confirma que la política está activa |
+| 2.10 | Páginas de documentación de FastAPI | `TestClient` sobre `/docs`, `/redoc`, `/openapi.json` | Antes: `/docs` y `/redoc` 200 y cargaban `cdn.jsdelivr`. Desactivadas: 404; `/openapi.json` 200. Test `test_no_cdn_documentation_pages` |
+| 2.11 | Consumo del control plane (medido durante la implementación) | `docker stats --no-stream` en reposo y con 6 logins simultáneos | Reposo 40,6 MiB; pico 48,7 MiB (el semáforo limita a 2 hashes Argon2 simultáneos); cada login 0,16–0,44 s. Medida orientativa, no verifica RNF-07 |
+| 2.12 | Secretos en lo versionado | `grep` de claves privadas, tokens `ghp_` y hashes Argon2 completos en los archivos nuevos y modificados | Sin coincidencias. Ninguna base de datos (`*.sqlite3`, `*.db`) en el árbol |
+| 2.13 | Integridad de `formato_preguntas.md` | `sha256sum` | Sin cambios (`af7d4826…f694`) |
+
+Errores encontrados y corregidos durante la revisión:
+
+1. La imagen del agente incluía `argon2-cffi` y `httpx` porque eran dependencias base. Se separaron en
+   extras por componente (commit `e43ff57`).
+2. `/docs` y `/redoc` dependían de un CDN y quedaban rotas por la CSP. Desactivadas (commit `2cd9e44`).
+3. El navegador pedía `/favicon.ico` (404 en consola). Añadido `favicon.svg` local.
+4. El script E2E dejaba sus imágenes `minipaas-e2e-*`. Ahora usa `down -v --rmi local`.
+5. Durante el recorrido del panel, dos fallos eran de la propia herramienta de prueba (un selector que
+   coincidía con el título del diálogo y una navegación a la misma URL sin recarga); no eran fallos
+   del panel. Se comprobó en los logs del servidor (no llegó ninguna petición `DELETE`) antes de
+   descartarlo.
+
+No ejecutado: CI en GitHub (sin *push* en esta fase, por indicación del usuario).

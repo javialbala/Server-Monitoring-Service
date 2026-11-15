@@ -16,11 +16,14 @@ Estos cambios fueron **aprobados por el equipo el 2026-11-15**.
 
 ## 6.2 Fases
 
+Estado a 2026-11-15: Fases 0 y 1 **aprobadas**; Fase 2 **terminada, pendiente de aprobación**; el
+resto, pendientes.
+
 | Fase | Nombre | Objetivo y entregables principales | Criterio de aceptación |
 |---|---|---|---|
 | 0 | Análisis y arquitectura | Requisitos, arquitectura, decisiones, riesgos, estrategia de pruebas, documentación inicial. | Documentación revisada y aprobada. |
 | 1 | Estructura y entorno aislado | Estructura de directorios, `pyproject.toml`, `ruff`, `pytest`, Dockerfiles, `compose.dev.yaml` con control plane y agente «hola mundo», CI básica, guía de desarrollo. | `docker compose up` local arranca ambos procesos; el control plane llama al agente; CI en verde; el control plane no ve el socket. |
-| 2 | Control plane, base de datos y API básica | SQLite + esquema y migraciones, modelo de aplicaciones (sin Docker), autenticación, CSRF, auditoría, esqueleto del panel (login + lista de aplicaciones). | CRUD de aplicaciones por API y panel con sesión; tests de API en verde. |
+| 2 | Control plane, base de datos y API básica | SQLite + esquema y migraciones, modelo de aplicaciones (sin Docker), autenticación, CSRF, auditoría, esqueleto del panel (login + lista de aplicaciones). | CRUD de aplicaciones por API y panel con sesión; tests de API en verde. **Cumplido** (pendiente de aprobación): 214 tests, E2E 12/12, recorrido del panel en navegador. |
 | 3 | Agente runtime y ciclo de vida básico | Agente con política y lista blanca; cliente del agente; crear/arrancar/parar/eliminar una aplicación de un servicio desde imagen; sincronización de estado. | Despliegue real de `nginx:alpine` en local; tests de política; contenedor ajeno protegido. |
 | 4 | Despliegues, imágenes y plantillas | Revisiones inmutables, despliegue en segundo plano, restauración automática ante fallo, *rollback* de la versión de la aplicación (no de los datos), catálogo de plantillas propias. | Redespliegue y *rollback* verificados con test de integración (incluido que los volúmenes no se alteran); advertencia sobre datos visible en el panel; plantilla desplegada desde el panel. |
 | 5 | Configuración: variables y puertos | Variables de entorno y secretos; publicación de puertos en rango; detección de conflictos. | Secretos nunca devueltos por la API; conflicto de puertos detectado antes de desplegar. |

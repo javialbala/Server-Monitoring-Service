@@ -18,16 +18,20 @@ minipaas/                         (raíz del repositorio)
 │       │   ├── service_request.py Esquema ServiceRequest (contrato control plane ↔ agente) [Fase 3]
 │       │   ├── naming.py         Prefijo y etiquetas (minipaas-*, minipaas.managed)   [Fase 1 ✔]
 │       │   └── secrets.py        Lectura y validación del token compartido            [Fase 1 ✔]
-│       ├── controlplane/         Proceso sin privilegios                        [Fase 1–2]
-│       │   ├── main.py           Creación de la app FastAPI y arranque
-│       │   ├── config.py         Configuración desde variables de entorno
-│       │   ├── api/              Rutas REST (auth, apps, deployments, monitoring, templates)
-│       │   ├── services/         Lógica: applications, deployments, monitoring, audit
-│       │   ├── spec/             Validación y traducción: storage, networking, resources
-│       │   ├── db/               Conexión SQLite, esquema, migraciones, repositorios
-│       │   ├── security/         Sesiones, contraseñas, CSRF
-│       │   ├── agent_client.py   Cliente HTTP del agente
-│       │   └── web/              Panel: index.html, css/, js/, vendor/chart.js
+│       ├── controlplane/         Proceso sin privilegios                        [Fase 1–2 ✔]
+│       │   ├── main.py           Ensamblado de la app FastAPI y arranque         [✔]
+│       │   ├── config.py         Configuración desde variables de entorno        [✔]
+│       │   ├── clock.py          Reloj inyectable (UTC)                          [Fase 2 ✔]
+│       │   ├── schemas.py        Esquemas Pydantic de entrada y salida           [Fase 2 ✔]
+│       │   ├── manage.py         CLI: migrate, db-version, create-admin          [Fase 2 ✔]
+│       │   ├── api/              Rutas: health, auth, applications, deps         [Fase 2 ✔] (+ despliegues, monitorización: fases 3–8)
+│       │   ├── services/         Casos de uso: auth, applications, audit         [Fase 2 ✔] (+ deployments, monitoring)
+│       │   ├── repositories/     SQL explícito: users, sessions, applications, audit [Fase 2 ✔]
+│       │   ├── db/               Conexión, transacciones, migraciones (*.sql)    [Fase 2 ✔]
+│       │   ├── security/         Contraseñas, sesiones, CSRF, límite de intentos [Fase 2 ✔]
+│       │   ├── spec/             Validación y traducción: storage, networking, resources [Fases 3–9]
+│       │   ├── agent_client.py   Cliente HTTP del agente                         [Fase 1 ✔]
+│       │   └── web/              Panel: index.html, favicon.svg, css/, js/ (+ js/views/) [Fases 1–2 ✔]
 │       └── agent/                Proceso con acceso a Docker                    [Fase 3]
 │           ├── main.py           API mínima del agente
 │           ├── policy.py         Política de seguridad (lista blanca, revalidación)
@@ -45,7 +49,7 @@ minipaas/                         (raíz del repositorio)
 │   ├── unit/                     Sin Docker
 │   ├── api/                      Control plane con agente falso
 │   └── integration/              Docker local real (marcador `integration`)
-├── scripts/                      Utilidades (crear usuario admin, medir consumo…)
+├── scripts/                      prepare_dev_env, verify_dev_env, export_requirements, e2e_phase2 [✔]
 ├── .github/workflows/ci.yml      ruff + pytest                                   [Fase 1]
 └── docs/
     ├── README.md                 Índice de la documentación

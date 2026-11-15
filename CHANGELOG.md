@@ -3,7 +3,27 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Las versiones se
 corresponden con las fases del proyecto.
 
-## [Fase 1] — 2026-11-15 (pendiente de aprobación)
+## [Fase 2] — 2026-11-15 (pendiente de aprobación)
+
+### Añadido
+
+- SQLite con migraciones versionadas propias (`db/migrations/0001_initial.sql`), WAL, claves
+  foráneas y transacciones explícitas; volumen persistente `minipaas-data`.
+- Modelo de aplicaciones sin Docker (slug inmutable, estado lógico `draft`) y API REST CRUD.
+- Autenticación de un único administrador: Argon2id, sesiones en servidor con identificador
+  guardado como hash, caducidad, revocación, renovación y límite de intentos.
+- Protección CSRF (token sincronizador + `Origin`) y auditoría transaccional sin secretos.
+- CLI `python -m minipaas.controlplane.manage` (`migrate`, `db-version`, `create-admin`).
+- Panel: inicio de sesión, lista, alta, detalle con edición y borrado, navegación y cierre de sesión.
+- `scripts/e2e_phase2.sh`; `verify_dev_env.sh` pasa a 12 comprobaciones; `docs/api.md`;
+  ADR-016 a ADR-024; 214 tests.
+
+### Cambiado
+
+- Dependencias separadas por componente (extras `controlplane` y `agent`); `uv sync --all-extras`.
+- `/docs` y `/redoc` desactivados (dependían de un CDN).
+
+## [Fase 1] — 2026-11-15 (aprobada)
 
 ### Añadido
 
