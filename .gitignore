@@ -27,3 +27,7 @@ data/
 .vscode/
 *.swp
 .DS_Store
+
+# Entorno de desarrollo local de Docker (los crea scripts/prepare_dev_env.sh)
+deploy/secrets/
+deploy/.env

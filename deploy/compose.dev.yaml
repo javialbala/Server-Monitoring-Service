@@ -1,0 +1,69 @@
+# Entorno local de desarrollo. Uso (desde la raíz del repositorio):
+#   bash scripts/prepare_dev_env.sh
+#   docker compose --env-file deploy/.env -f deploy/compose.dev.yaml up -d --build --wait
+# Las rutas relativas de este archivo (build, secrets) son relativas a deploy/.
+name: minipaas-dev
+
+networks:
+  # Sin salida a Internet y sin puertos publicados: solo control plane y agente se ven aquí.
+  minipaas-internal:
+    internal: true
+  # Red normal, solo para el control plane (necesaria para publicar su puerto en localhost).
+  minipaas-public:
+
+secrets:
+  agent_token:
+    file: ./secrets/agent_token
+
+services:
+  controlplane:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.controlplane
+    ports:
+      - "127.0.0.1:8000:8000"   # solo accesible desde esta máquina
+    networks: [minipaas-internal, minipaas-public]
+    read_only: true              # sistema de archivos raíz de solo lectura
+    tmpfs: [/tmp]                # único sitio escribible, en memoria
+    cap_drop: [ALL]              # sin capabilities de Linux
+    security_opt: ["no-new-privileges:true"]   # impide ganar privilegios (setuid...)
+    secrets: [agent_token]
+    environment:
+      MINIPAAS_AGENT_TOKEN_FILE: /run/secrets/agent_token
+    labels:
+      minipaas.component: controlplane   # sin minipaas.managed: el agente no lo gestiona
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=2)"
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    depends_on:
+      - agent
+    # SIN socket de Docker: este componente no debe poder controlar el host.
+
+  agent:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.agent
+    # SIN "ports": solo es alcanzable desde la red interna.
+    networks: [minipaas-internal]
+    volumes:
+      # Único componente con acceso al socket de Docker. Equivale a root sobre el host
+      # (ver ADR-002): por eso el agente es mínimo, autenticado y con política estricta.
+      - /var/run/docker.sock:/var/run/docker.sock
+    # Permite usar el socket siendo UID 10002 (no root), añadiendo el grupo docker del host.
+    group_add: ["${DOCKER_GID:?Define DOCKER_GID en deploy/.env (ver scripts/prepare_dev_env.sh)}"]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    secrets: [agent_token]
+    environment:
+      MINIPAAS_AGENT_TOKEN_FILE: /run/secrets/agent_token
+    labels:
+      minipaas.component: agent   # sin minipaas.managed: el agente no puede gestionarse a sí mismo

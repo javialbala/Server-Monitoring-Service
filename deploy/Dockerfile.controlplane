@@ -1,0 +1,18 @@
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /app
+# Solo lo necesario para instalar el paquete.
+COPY pyproject.toml ./
+COPY src ./src
+RUN pip install --no-cache-dir .
+
+# Usuario sin privilegios (UID/GID fijos para poder razonar sobre permisos).
+RUN groupadd --gid 10001 minipaas && \
+    useradd --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin minipaas
+
+EXPOSE 8000
+CMD ["uvicorn", "--factory", "minipaas.controlplane.main:build_app_from_env", "--host", "0.0.0.0", "--port", "8000"]
+USER 10001:10001
