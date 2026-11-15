@@ -1,10 +1,25 @@
-// Detalle de una aplicación: ver, editar (nombre y descripción) y eliminar.
+// Detalle de una aplicación: centro de gestión. Esta vista solo orquesta;
+// cada sección vive en su propio módulo:
+//   app-header.js (estado y acciones), app-services.js + service-form.js,
+//   app-runtime.js (estado real), app-deployments.js (historial),
+//   app-deploy.js (flujo de despliegue y sondeo de progreso).
 
 import { el, clear } from "../dom.js";
 import { api, ApiError, isUnauthorized, errorMessage } from "../api.js";
-import { DESCRIPTION_MAX, NAME_MAX, formatDate } from "../format.js";
-import { field, formError, setBusy, applyValidationErrors, loadingBox, errorBox, toast } from "../ui.js";
-import { badge } from "./apps.js";
+import { DESCRIPTION_MAX, NAME_MAX } from "../format.js";
+import { field, formError, setBusy, applyValidationErrors, loadingBox, errorBox, toast, confirmDialog, operationError } from "../ui.js";
+import { IN_PROGRESS } from "../tones.js";
+import { renderHeader } from "./app-header.js";
+import { mount as mountServices } from "./app-services.js";
+import { mount as mountRuntime } from "./app-runtime.js";
+import { mount as mountDeployments } from "./app-deployments.js";
+import { createDeployFlow } from "./app-deploy.js";
+
+const ACTIONS = {
+  stop: { done: "Aplicación detenida." },
+  start: { done: "Aplicación en marcha." },
+  recover: { done: "Aplicación recuperada." },
+};
 
 export function render(root, ctx) {
   const slug = ctx.params.slug;
@@ -12,13 +27,24 @@ export function render(root, ctx) {
   const body = el("div");
   root.append(body);
 
+  // Estado de la vista (solo en memoria).
+  let app = null;
+  let serviceCount = null;
+  let deploying = false;
+  let busyAction = null;
+  let actionError = "";
+
+  let dashboard, headBox, progressBox, servicesBox, runtimeBox, deploymentsBox;
+  let services, runtime, deployments, flow;
+
   async function load() {
     clear(body);
     body.append(loadingBox("Cargando aplicación…"));
     try {
-      const app = await api.get(path);
+      app = await api.get(path);
       if (!ctx.isCurrent()) return;
-      showView(app);
+      buildDashboard();
+      reloadAll(false);
     } catch (e) {
       if (!ctx.isCurrent() || isUnauthorized(e)) return;
       clear(body);
@@ -32,30 +58,92 @@ export function render(root, ctx) {
     }
   }
 
-  function showView(app) {
-    clear(body);
-    const edit = el("button", { className: "btn-secondary", text: "Editar", attrs: { type: "button" } });
-    const del = el("button", { className: "btn-danger", text: "Eliminar", attrs: { type: "button" } });
-    edit.addEventListener("click", () => showEdit(app));
-    del.addEventListener("click", () => confirmDelete(app, del));
-
-    body.append(
-      el("p", {}, el("a", { text: "← Aplicaciones", attrs: { href: "#/apps" } })),
-      el("section", { className: "card", attrs: { "aria-labelledby": "app-title" } },
-        el("div", { className: "app-item-head" },
-          el("h1", { text: app.name, attrs: { id: "app-title", tabindex: "-1" } }), badge(app)),
-        el("dl", { className: "details" },
-          el("dt", { text: "Identificador" }), el("dd", {}, el("code", { text: app.slug })),
-          el("dt", { text: "Descripción" }),
-          el("dd", { className: app.description ? "" : "muted", text: app.description || "Sin descripción" }),
-          el("dt", { text: "Creada" }), el("dd", { text: formatDate(app.created_at) }),
-          el("dt", { text: "Última modificación" }), el("dd", { text: formatDate(app.updated_at) })),
-        el("p", { className: "meta", text: "Esta aplicación todavía no está desplegada." }),
-        el("div", { className: "actions" }, edit, del)));
+  function drawHeader() {
+    renderHeader(headBox, { app, serviceCount, deploying, busyAction, error: actionError }, {
+      onDeploy: () => { actionError = ""; flow.start(); },
+      onAction: runAction,
+      onEdit: () => showEdit(),
+      onDelete: (button) => confirmDelete(button),
+    });
   }
 
-  function showEdit(app) {
+  function buildDashboard() {
     clear(body);
+    dashboard = el("div");
+    headBox = el("div");
+    progressBox = el("div");
+    servicesBox = el("section", { className: "card", attrs: { "aria-label": "Servicios" } });
+    runtimeBox = el("section", { className: "card", attrs: { "aria-label": "Estado real" } });
+    deploymentsBox = el("section", { className: "card", attrs: { "aria-label": "Historial de despliegues" } });
+    dashboard.append(
+      el("p", {}, el("a", { text: "← Aplicaciones", attrs: { href: "#/apps" } })),
+      el("div", { className: "sections" }, headBox, progressBox, servicesBox, runtimeBox, deploymentsBox));
+    body.append(dashboard);
+
+    services = mountServices(servicesBox, { ctx, path, onChange: (items) => { serviceCount = items.length; drawHeader(); } });
+    runtime = mountRuntime(runtimeBox, { ctx, path });
+    deployments = mountDeployments(deploymentsBox, { ctx, path });
+    flow = createDeployFlow({
+      ctx, path, panel: progressBox,
+      onBusyChange: (value) => { deploying = value; drawHeader(); },
+      onFinished: () => reloadAll(true),
+    });
+    drawHeader();
+  }
+
+  // Recarga aplicación, servicios, estado real e historial. Si hay una
+  // operación en curso y no la seguimos, se localiza en el historial.
+  async function reloadAll(refreshApp) {
+    const appPromise = refreshApp
+      ? api.get(path).then((a) => { if (ctx.isCurrent()) { app = a; drawHeader(); } }).catch((e) => {
+        if (ctx.isCurrent() && e instanceof ApiError && e.status === 404) load();
+      })
+      : Promise.resolve();
+    const [, , , items] = await Promise.all([appPromise, services.reload(), runtime.reload(), deployments.reload()]);
+    if (!ctx.isCurrent() || !app) return;
+    if (app.operation_in_progress && !flow.busy && items) {
+      const running = items.find((d) => IN_PROGRESS.has(d.status));
+      if (running) flow.follow(running.revision);
+    }
+  }
+
+  // Detener / Arrancar / Recuperar: peticiones síncronas que pueden tardar.
+  async function runAction(kind) {
+    busyAction = kind; actionError = ""; drawHeader();
+    try {
+      app = await api.post(`${path}/${kind}`);
+      if (!ctx.isCurrent()) return;
+      toast(ACTIONS[kind].done);
+    } catch (e) {
+      if (!ctx.isCurrent() || isUnauthorized(e)) return;
+      actionError = operationError(e);
+    }
+    busyAction = null;
+    drawHeader();
+    await reloadAll(true);
+  }
+
+  function confirmDelete(opener) {
+    confirmDialog({
+      title: `¿Eliminar «${app.name}»?`,
+      text: "Se detendrán y eliminarán sus servicios en ejecución. Esta acción no se puede deshacer.",
+      confirmLabel: "Eliminar", busyLabel: "Eliminando…", opener,
+      action: async () => {
+        try {
+          await api.del(path);
+        } catch (e) {
+          if (!(e instanceof ApiError && e.status === 404)) throw e;
+        }
+        if (flow) flow.stop();
+        toast(`Aplicación «${app.name}» eliminada.`);
+        location.hash = "#/apps";
+      },
+    });
+  }
+
+  // Edición de nombre y descripción: sustituye temporalmente el panel.
+  function showEdit() {
+    dashboard.hidden = true;
     const card = el("section", { className: "card card-form", attrs: { "aria-labelledby": "edit-title" } });
     card.append(el("h1", { text: "Editar aplicación", attrs: { id: "edit-title", tabindex: "-1" } }));
     const form = el("form", { attrs: { novalidate: true } });
@@ -67,12 +155,12 @@ export function render(root, ctx) {
     description.input.addEventListener("input", () => {
       counter.textContent = `${description.input.value.length}/${DESCRIPTION_MAX}`;
     });
-    const slugInfo = el("p", { className: "help" }, "Identificador: ", el("code", { text: app.slug }),
-      " (no se puede cambiar).");
+    const slugInfo = el("p", { className: "help" }, "Identificador: ", el("code", { text: app.slug }), " (no se puede cambiar).");
     const error = formError();
     const save = el("button", { text: "Guardar cambios", attrs: { type: "submit" } });
     const cancel = el("button", { className: "btn-secondary", text: "Cancelar", attrs: { type: "button" } });
-    cancel.addEventListener("click", () => showView(app));
+    const close = () => { card.remove(); dashboard.hidden = false; drawHeader(); body.querySelector("h1").focus(); };
+    cancel.addEventListener("click", close);
     form.append(name.wrap, slugInfo, description.wrap, error.node, el("div", { className: "actions" }, save, cancel));
     card.append(form);
     body.append(card);
@@ -91,11 +179,10 @@ export function render(root, ctx) {
       }
       setBusy(save, true, "Guardando…", "Guardar cambios");
       try {
-        const updated = await api.patch(path, { name: nameValue, description: description.input.value });
+        app = await api.patch(path, { name: nameValue, description: description.input.value });
         if (!ctx.isCurrent()) return;
         toast("Cambios guardados.");
-        showView(updated);
-        body.querySelector("h1").focus();
+        close();
       } catch (e) {
         if (!ctx.isCurrent() || isUnauthorized(e)) return;
         if (e instanceof ApiError && e.status === 404) { load(); return; }
@@ -109,39 +196,6 @@ export function render(root, ctx) {
         if (save.isConnected) setBusy(save, false, "Guardando…", "Guardar cambios");
       }
     });
-  }
-
-  // Confirmación con <dialog> modal: el navegador gestiona foco y tecla Escape.
-  function confirmDelete(app, opener) {
-    const dialog = el("dialog", { className: "dialog", attrs: { "aria-labelledby": "del-title" } });
-    const error = formError();
-    const confirm = el("button", { className: "btn-danger", text: "Eliminar", attrs: { type: "button" } });
-    const cancel = el("button", { className: "btn-secondary", text: "Cancelar", attrs: { type: "button" } });
-    dialog.append(
-      el("h2", { text: `¿Eliminar «${app.name}»?`, attrs: { id: "del-title" } }),
-      el("p", { text: "Esta acción no se puede deshacer." }),
-      error.node,
-      el("div", { className: "actions" }, confirm, cancel));
-    document.body.append(dialog);
-    dialog.addEventListener("close", () => { dialog.remove(); if (opener.isConnected) opener.focus(); });
-    cancel.addEventListener("click", () => dialog.close());
-    confirm.addEventListener("click", async () => {
-      error.clear();
-      setBusy(confirm, true, "Eliminando…", "Eliminar");
-      try {
-        await api.del(path);
-        dialog.close();
-        toast(`Aplicación «${app.name}» eliminada.`);
-        location.hash = "#/apps";
-      } catch (e) {
-        if (e instanceof ApiError && e.status === 404) { dialog.close(); location.hash = "#/apps"; return; }
-        if (isUnauthorized(e)) { dialog.close(); return; }
-        error.set(errorMessage(e));
-        setBusy(confirm, false, "Eliminando…", "Eliminar");
-      }
-    });
-    dialog.showModal();
-    cancel.focus();
   }
 
   load();

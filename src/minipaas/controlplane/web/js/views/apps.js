@@ -3,12 +3,12 @@
 import { el, clear } from "../dom.js";
 import { api, isUnauthorized, errorMessage } from "../api.js";
 import { formatDate } from "../format.js";
-import { loadingBox, errorBox } from "../ui.js";
+import { loadingBox, errorBox, toneBadge } from "../ui.js";
+import { APP_TONE } from "../tones.js";
 
-// La clase de la insignia sale de `status`; se limita a [a-z-] por seguridad.
+// El tono de la insignia sale de `status` (tabla cerrada en tones.js).
 export function badge(app) {
-  const kind = String(app.status).replace(/[^a-z-]/g, "");
-  return el("span", { className: "badge badge-" + kind, text: app.status_label });
+  return toneBadge(app.status_label, APP_TONE[app.status] || "neutral");
 }
 
 function newButton() {
@@ -22,8 +22,12 @@ function appCard(app) {
     ? el("p", { className: "app-description", text: app.description })
     : el("p", { className: "app-description muted", text: "Sin descripción" });
   return el("li", { className: "card app-item" },
-    el("div", { className: "app-item-head" }, title, badge(app)),
+    el("div", { className: "app-item-head" }, title,
+      el("span", { className: "badge-group" }, badge(app),
+        app.operation_in_progress ? toneBadge("Operación en curso", "progress") : null)),
     description,
+    Number.isInteger(app.active_revision)
+      ? el("p", { className: "meta", text: "Revisión " + app.active_revision }) : null,
     el("p", { className: "meta", text: "Creada el " + formatDate(app.created_at) }));
 }
 
