@@ -42,6 +42,8 @@ services:
     secrets: [controlplane_token]
     environment:
       MINIPAAS_AGENT_TOKEN_FILE: /run/secrets/controlplane_token
+      # Muestra también las entradas de prueba del catálogo (debe coincidir con el agente).
+      MINIPAAS_ENABLE_TEST_CATALOG: ${MINIPAAS_ENABLE_TEST_CATALOG:-false}
     labels:
       minipaas.component: controlplane   # sin minipaas.managed: el agente no lo gestiona
     healthcheck:
@@ -77,5 +79,12 @@ services:
     secrets: [agent_token]
     environment:
       MINIPAAS_AGENT_TOKEN_FILE: /run/secrets/agent_token
+      # Instalación a la que pertenece el agente: solo toca recursos con esta etiqueta.
+      MINIPAAS_INSTANCE: ${MINIPAAS_INSTANCE:-dev}
+      # Dirección del host donde se publican los puertos de las apps; 0.0.0.0 las expondría
+      # a la red (decisión del administrador, no del usuario del panel).
+      MINIPAAS_PUBLISH_ADDRESS: ${MINIPAAS_PUBLISH_ADDRESS:-127.0.0.1}
+      # Habilita las entradas de prueba del catálogo (test-crash, test-unhealthy).
+      MINIPAAS_ENABLE_TEST_CATALOG: ${MINIPAAS_ENABLE_TEST_CATALOG:-false}
     labels:
       minipaas.component: agent   # sin minipaas.managed: el agente no puede gestionarse a sí mismo

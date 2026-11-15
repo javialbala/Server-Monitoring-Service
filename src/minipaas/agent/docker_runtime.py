@@ -14,7 +14,11 @@ class DockerStatus:
 
 
 class DockerRuntime:
-    """Envuelve el SDK de Docker. En esta fase solo comprueba que el daemon responde."""
+    """Envoltura fina del SDK de Docker.
+
+    Solo da acceso al cliente y comprueba que el daemon responde. Toda la política de seguridad
+    vive en `AgentOperations`; así los tests pueden sustituir esta clase por un doble.
+    """
 
     def __init__(self) -> None:
         self._client: docker.DockerClient | None = None
@@ -24,6 +28,9 @@ class DockerRuntime:
         if self._client is None:
             self._client = docker.from_env()
         return self._client
+
+    def client(self) -> docker.DockerClient:
+        return self._get_client()
 
     def ping(self) -> DockerStatus:
         try:
