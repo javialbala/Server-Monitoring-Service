@@ -39,6 +39,7 @@ minipaas/                         (raíz del repositorio)
 │   ├── Dockerfile.agent
 │   ├── compose.dev.yaml          Entorno local de desarrollo                     [Fase 1 ✔]
 │   ├── .env.example              Ejemplo de deploy/.env (DOCKER_GID)             [Fase 1 ✔]
+│   ├── requirements/             Dependencias con hashes exportadas de uv.lock   [Fase 1 ✔]
 │   └── compose.yaml              Despliegue en el servidor                       [Fase 13]
 ├── tests/
 │   ├── unit/                     Sin Docker

@@ -58,3 +58,23 @@ Errores encontrados y corregidos durante la revisión:
 4. Colisión de nombres de módulos de test (`test_docker_runtime.py` en dos carpetas). Renombrado.
 
 Pendiente: ejecución del CI en GitHub (requiere *push*); revisión visual del panel por el equipo.
+
+### Revisión de la Fase 1 (2026-11-15, tras los cambios de permisos y reproducibilidad)
+
+| # | Prueba | Comando / procedimiento | Resultado real |
+|---|---|---|---|
+| 1.13 | ¿Respeta Compose `uid`/`gid`/`mode` en *secrets* de archivo? | Proyecto Compose desechable (`minipaas-secret-test`, en el directorio temporal de la sesión): archivo `600` de UID 1000, contenedor con `user: 10002` y sintaxis larga con `uid/gid/mode` | **No**: Compose 5.6.1 avisa `uid/gid/mode is not supported outside Swarm mode and will be ignored`; el archivo aparece como `600 1000` y `wc` da `Permission denied`. Proyecto eliminado |
+| 1.14 | Preparación de los tokens | `bash scripts/prepare_dev_env.sh` (dos veces) | 1.ª: regenera (el archivo antiguo `644` no era válido): `drwx------ 1000 deploy/secrets`, `-rw------- 10002 agent_token`, `-rw------- 10001 controlplane_token`. 2.ª: «ya existen… no se regeneran» (idempotente). `cat deploy/secrets/agent_token` desde el host: «Permiso denegado» |
+| 1.15 | Exportación del bloqueo | `bash scripts/export_requirements.sh` (dos veces) y `cmp` | Genera `controlplane.txt` (17 paquetes) y `agent.txt` (22 entradas, una de ellas `pywin32` solo para Windows); segunda ejecución idéntica byte a byte |
+| 1.16 | Estilo | `uv run ruff check .`; `uv run ruff format --check .` | `All checks passed!`; `37 files already formatted` |
+| 1.17 | Tests unitarios y de API | `uv run pytest -m "not integration" --cov=minipaas` | **32 passed**, 1 deselected; cobertura **96 %** |
+| 1.18 | Integración con Docker | `uv run pytest -m integration` | **1 passed** |
+| 1.19 | Construcción de imágenes desde el bloqueo | `docker compose ... build --no-cache` y `up --build` | `pip install --no-cache-dir --require-hashes -r requirements.txt` instala exactamente las versiones exportadas (p. ej. `fastapi-0.163.1`, `docker-7.2.0`, `uvicorn-0.54.0`); `pywin32` ignorado por marcador de plataforma |
+| 1.20 | Aislamiento (7 comprobaciones originales + 3 nuevas) | `bash scripts/verify_dev_env.sh` | **10/10 OK**, código de salida 0. Nuevas: secret `600` y directorio `700` en el host; el control plane lee su secret (`600`, propietario su UID 10001); el agente lee su secret (`600`, propietario su UID 10002) |
+| 1.21 | Contenido de las imágenes | `importlib.metadata` dentro de cada contenedor | agent: fastapi 0.163.1, docker 7.2.0, uvicorn 0.54.0. controlplane: fastapi 0.163.1, **sin** SDK de Docker, **sin** `hatchling` |
+| 1.22 | Tamaño de las imágenes | `docker image ls` | agent **208 MB** (antes 209), controlplane **203 MB** (antes 204) |
+| 1.23 | Consumo orientativo | `docker stats --no-stream` | agent 42,9 MiB, controlplane 38,7 MiB (no verifica RNF-07) |
+| 1.24 | Limpieza | `docker compose ... down`; borrado por ID de 5 imágenes huérfanas propias (CMD `minipaas.*`) | 0 contenedores residuales; imágenes ajenas intactas (`n8n`, `postgres`, etc.) |
+| 1.25 | Credenciales para *push* (sin intentarlo) | `git config credential.helper`, `command -v gh`, variables `GH_TOKEN`/`GITHUB_TOKEN`, `~/.git-credentials` | Ninguna disponible. No se intentó el *push* |
+
+No ejecutado: CI en GitHub (requiere *push*); revisión visual del panel.

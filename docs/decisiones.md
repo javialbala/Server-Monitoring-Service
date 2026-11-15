@@ -23,8 +23,8 @@ Estados posibles:
 | 010 | Autenticación con un único administrador y sesiones en servidor | **Aceptada con matices** (2026-11-15) |
 | 011 | Despliegue *recreate* con restauración; *rollback* de aplicación, no de datos | Aceptada (matizada el 2026-11-15) |
 | 012 | Ejecución en segundo plano con un *worker* `asyncio` interno | Aceptada |
-| 013 | `uv` para el entorno de desarrollo; `pip` en las imágenes | Aceptada (Fase 1) |
-| 014 | Token compartido entregado como *secret* de archivo | Aceptada (Fase 1) |
+| 013 | `uv` y `uv.lock` en desarrollo, CI e imágenes (exportado con hashes) | Aceptada (Fase 1, revisada) |
+| 014 | Token compartido como *secret* de archivo: una copia 600 por componente | Aceptada (Fase 1, revisada) |
 | 015 | Python 3.12 en imágenes y CI | Aceptada (Fase 1) |
 
 ### Historial de aprobaciones
@@ -252,7 +252,7 @@ necesita sobrevivir a reinicios.
 
 **Motivo.** Sin servicios adicionales; suficiente para un solo servidor; fácil de explicar.
 
-## ADR-013 · `uv` para el entorno de desarrollo; `pip` en las imágenes
+## ADR-013 · `uv` y `uv.lock` en desarrollo, CI e imágenes
 
 **Contexto.** El sistema no tiene `pip` global y hace falta un entorno reproducible para el equipo y
 el CI.
@@ -261,15 +261,28 @@ el CI.
 
 **Decisión.** `uv` para crear el entorno virtual, resolver dependencias y fijarlas en `uv.lock`
 (versionado). Las herramientas de desarrollo (`pytest`, `pytest-cov`, `ruff`) van en un grupo `dev`
-de `[dependency-groups]`, que no se instala en las imágenes. Las imágenes Docker usan `pip install`
-del propio paquete para no añadir herramientas a la imagen.
+de `[dependency-groups]`, que no se instala en las imágenes.
 
-**Consecuencias.** Desarrollo y CI reproducibles con `uv sync --frozen`. Las imágenes **no** usan
-todavía el archivo de bloqueo: dos construcciones en fechas distintas pueden resolver versiones
-diferentes. Se resolverá (exportando el bloqueo o fijando versiones) antes del despliegue final
-(Fase 11/13).
+**Revisión (2026-11-15): las imágenes también usan el bloqueo.** En la primera versión, las imágenes
+hacían `pip install .`, de modo que pip resolvía las versiones en el momento de construir (y además
+descargaba la herramienta de build `hatchling` sin versión fija). Alternativas valoradas:
 
-## ADR-014 · Token compartido entregado como *secret* de archivo
+| Opción | Valoración |
+|---|---|
+| Instalar `uv` en la imagen y usar `uv sync --frozen` | Añade una herramienta más a la imagen o una etapa extra; innecesario |
+| **Exportar `uv.lock` a `requirements` con hashes** (`uv export`) e instalar con `pip --require-hashes` | Sin herramientas nuevas en la imagen; mismo tamaño; además verifica la integridad (SHA-256) de cada paquete |
+
+Se elige la exportación. `scripts/export_requirements.sh` genera `deploy/requirements/controlplane.txt`
+y `deploy/requirements/agent.txt` (versionados); los Dockerfiles los instalan con
+`pip install --require-hashes` y copian el código en `PYTHONPATH` sin instalarlo como paquete. El CI
+regenera los archivos y falla si no coinciden con `uv.lock`.
+
+**Consecuencias.** Construcciones reproducibles y verificadas por hash; tamaño de imagen igual
+(203/208 MB frente a 204/209 MB). Coste: tras cambiar dependencias hay que ejecutar
+`scripts/export_requirements.sh` (el CI lo recuerda). La imagen base `python:3.12-slim` sigue
+referenciada por etiqueta, no por *digest*: se fijará antes del despliegue final (Fase 11/13).
+
+## ADR-014 · Token compartido como *secret* de archivo: una copia 600 por componente
 
 **Contexto.** Control plane y agente comparten un token. Debe llegar a ambos procesos sin quedar
 expuesto.
@@ -283,12 +296,26 @@ heredan por los procesos hijos; un archivo montado no. Los procesos leen la ruta
 comparación usa `hmac.compare_digest` (tiempo constante) y responde igual si el token falta o es
 incorrecto.
 
-**Matiz de desarrollo.** Sin Swarm, Compose monta el *secret* como un *bind mount* del archivo del
-host, con su propietario y permisos. Con permisos `600` los usuarios sin privilegios de los
-contenedores (UID 10001 y 10002) no pueden leerlo (verificado: `Permission denied`). En desarrollo el
-archivo tiene permisos `644` dentro de un directorio `700`, de modo que en el host solo el
-desarrollador llega a él. Para producción (Fase 13) se revisará (p. ej. propietario por grupo
-dedicado).
+**Permisos (revisión del 2026-11-15).** Sin Swarm, Compose monta cada *secret* como un *bind mount*
+del archivo del host, con su propietario y sus permisos, e **ignora** `uid`, `gid` y `mode`
+(verificado con Compose 5.6.1: «not supported outside Swarm mode»). Por eso, con un único archivo
+`600` de tu usuario, los UID 10001 y 10002 recibían `Permission denied`, y la primera versión usó
+`644`. Alternativas valoradas:
+
+| Opción | Valoración |
+|---|---|
+| `644` dentro de un directorio `700` (primera versión) | Funciona, pero el archivo es legible por «otros»; rechazada en la revisión |
+| `640` con un grupo compartido | Sigue sin ser `600` y añade un grupo en el host |
+| Mismo UID para ambos contenedores o el UID del desarrollador | Pierde la separación de identidades entre componentes |
+| Contenedor de arranque como root que copie el token | Un proceso root más en cada arranque |
+| **Una copia del mismo token por componente, `600`, con propietario el UID de su contenedor**, directorio `700` | Mínimo privilegio: cada archivo solo lo lee el proceso que lo necesita (ni siquiera el usuario del host) |
+
+Se elige la última. `scripts/prepare_dev_env.sh` crea `controlplane_token` (UID 10001) y
+`agent_token` (UID 10002). Asignar un archivo a otro UID requiere root en el host: en lugar de pedir
+`sudo`, el script usa un contenedor efímero sin red que solo escribe esos dos archivos. No concede
+privilegios nuevos, porque quien usa Docker ya tiene un acceso equivalente a root (ADR-002).
+`scripts/verify_dev_env.sh` comprueba los permisos en el host y que cada contenedor lee su archivo con
+su propio UID. Para producción (Fase 13) se aplicará el mismo esquema.
 
 ## ADR-015 · Python 3.12 en imágenes y CI
 

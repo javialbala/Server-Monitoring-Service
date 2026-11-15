@@ -13,7 +13,7 @@
 | Fase | 1 — Estructura del proyecto y entorno aislado |
 | Fecha | 2026-11-15 |
 | Objetivo | Crear la estructura del código, las herramientas de calidad y pruebas, y un entorno local en contenedores en el que el control plane y el agente se comunican de forma autenticada, respetando desde el principio la separación de privilegios aprobada en la Fase 0. |
-| Estado | **Completada, pendiente de revisión y aprobación del equipo.** El CI no se ha podido ejecutar en GitHub porque el *push* sigue pendiente (apartado F). |
+| Estado | **Completada y revisada; pendiente de aprobación del equipo.** Tras la primera revisión se corrigieron los permisos del token y la reproducibilidad de las imágenes (apartado B.5). El CI no se ha podido ejecutar en GitHub porque el *push* sigue pendiente (apartado F). |
 
 Qué hay y qué no: existe un **esqueleto funcional** (dos procesos que se comunican y un panel de
 estado). **No se puede desplegar ninguna aplicación todavía**; eso empieza en la Fase 3.
@@ -31,7 +31,8 @@ estado). **No se puede desplegar ninguna aplicación todavía**; eso empieza en 
 | Control plane: `GET /api/health` (estado propio, del agente y de Docker, sin versiones ni detalles técnicos) | Implementado y verificado |
 | Panel «Estado del sistema» (tres indicadores, modo claro/oscuro, adaptable a móvil, sin CDN) | Implementado; verificado por tests y `curl`; **revisión visual pendiente** por el equipo |
 | Cabeceras de seguridad HTTP (CSP, `nosniff`, `no-referrer`, `X-Frame-Options`) | Implementado y verificado |
-| Token compartido como *secret* de archivo, longitud mínima, comparación en tiempo constante | Implementado y verificado |
+| Token compartido como *secret* de archivo (una copia `600` por componente), longitud mínima, comparación en tiempo constante | Implementado y verificado |
+| Imágenes construidas desde `uv.lock` con verificación de hashes | Implementado y verificado |
 | Imágenes Docker con usuarios sin privilegios | Implementado y verificado |
 | `compose.dev.yaml` con red interna, socket solo en el agente y endurecimiento de contenedores | Implementado y verificado |
 | Scripts de preparación y de verificación del aislamiento | Implementado y verificado |
@@ -52,7 +53,9 @@ estado). **No se puede desplegar ninguna aplicación todavía**; eso empieza en 
 | `tests/integration/test_docker_runtime.py` | Comprobación contra el Docker local real (solo lectura) |
 | `deploy/Dockerfile.controlplane`, `deploy/Dockerfile.agent` | Imágenes `python:3.12-slim` con UID 10001 / 10002 |
 | `deploy/compose.dev.yaml`, `deploy/.env.example` | Entorno local `minipaas-dev` |
-| `scripts/prepare_dev_env.sh`, `scripts/verify_dev_env.sh` | Preparación (token, GID) y verificación automática (7 comprobaciones) |
+| `deploy/requirements/{controlplane,agent}.txt` | Dependencias exportadas de `uv.lock` con hashes (las usan los Dockerfiles) |
+| `scripts/export_requirements.sh` | Regenera `deploy/requirements/` desde `uv.lock` |
+| `scripts/prepare_dev_env.sh`, `scripts/verify_dev_env.sh` | Preparación (tokens, GID) y verificación automática (10 comprobaciones) |
 | `.github/workflows/ci.yml` | Integración continua |
 | `.dockerignore` | Excluye código no necesario, secretos y documentación de las imágenes |
 | `docs/guia-desarrollo.md`, `docs/informes/fase-01.md` | Guía del entorno local e informe |
@@ -76,9 +79,16 @@ sin cambios (hash verificado).
 
 | ADR | Decisión | Motivo |
 |---|---|---|
-| 013 | `uv` para el entorno de desarrollo y el bloqueo de versiones; `pip` dentro de las imágenes | Reproducibilidad en desarrollo y CI; imágenes sin herramientas extra |
-| 014 | Token como *secret* de archivo, no como variable de entorno | Las variables de entorno se ven con `docker inspect` |
+| 013 | `uv` y `uv.lock` en desarrollo y CI; las imágenes instalan el bloqueo exportado con hashes | Reproducibilidad e integridad sin añadir herramientas a las imágenes |
+| 014 | Token como *secret* de archivo, una copia `600` por componente | Las variables de entorno se ven con `docker inspect`; mínimo privilegio sobre el archivo |
 | 015 | Python 3.12 en imágenes, CI y entorno local | Probar exactamente lo que se ejecuta |
+
+### B.5 Cambios tras la revisión del equipo (2026-11-15)
+
+| Punto revisado | Problema | Solución adoptada | Verificación |
+|---|---|---|---|
+| Permisos del token | El archivo tenía `644` porque Compose (sin Swarm) monta el *secret* con el propietario y permisos del host e **ignora** `uid/gid/mode` (comprobado: «not supported outside Swarm mode»). Con `600` y propietario el usuario del host, los UID 10001/10002 no podían leerlo | Una copia del mismo token por componente: `controlplane_token` (`600`, UID 10001) y `agent_token` (`600`, UID 10002), directorio `700`. El propietario se asigna con un contenedor efímero sin red (sin `sudo`, sin privilegios nuevos) | 3 comprobaciones nuevas en `verify_dev_env.sh`, todas OK; el usuario del host ya no puede leer el token |
+| Reproducibilidad de las imágenes | `pip install .` resolvía versiones al construir y descargaba `hatchling` sin fijar | `uv export` con hashes → `deploy/requirements/*.txt`; `pip --require-hashes`; código en `PYTHONPATH`; el CI comprueba la sincronización con `uv.lock` | Versiones dentro de las imágenes iguales al bloqueo; tamaño 203/208 MB (antes 204/209) |
 
 Decisiones menores (documentadas en el código y en la guía): etiqueta `minipaas.component` para los
 contenedores de la plataforma (que **no** llevan `minipaas.managed`, para que el agente nunca pueda
@@ -123,8 +133,10 @@ Inconvenientes y limitaciones:
 
 - Pertenecer al grupo `docker` sigue equivaliendo a root sobre el host: el agente **no es root en su
   contenedor**, pero el riesgo del socket permanece (riesgo residual reconocido en la Fase 0).
-- El *secret* del token tiene permisos 644 en desarrollo (ADR-014); hay que revisarlo para producción.
-- Las imágenes no usan todavía el archivo de bloqueo de versiones (ADR-013).
+- El script de preparación usa un contenedor root efímero para asignar el propietario de los tokens;
+  es legítimo porque el desarrollador ya tiene acceso a Docker, pero conviene explicarlo.
+- Tras cambiar dependencias hay que exportar el bloqueo (`scripts/export_requirements.sh`); el CI lo
+  detecta si se olvida.
 - Si el agente no responde, `/api/health` tarda 3 s (el timeout) en contestar.
 
 ### C.4 Conceptos de GSASD aplicados
@@ -139,14 +151,17 @@ mínimo privilegio, aislamiento con *namespaces* y *capabilities*, comprobacione
 ## D. Pruebas y resultados
 
 Resultados **reales**, ejecutados en local el 2026-11-15 (detalle en `docs/registro-pruebas.md`,
-entradas 1.1–1.12):
+entradas 1.1–1.25; las 1.13–1.25 corresponden a la revisión):
 
 | Prueba | Comando | Resultado |
 |---|---|---|
 | Estilo y análisis estático | `uv run ruff check .`; `uv run ruff format --check .` | Sin errores; 35 archivos formateados |
 | Unitarias y de API | `uv run pytest -m "not integration" --cov=minipaas` | **32 passed**, cobertura **96 %** |
 | Integración con Docker | `uv run pytest -m integration` | **1 passed** |
-| Aislamiento del entorno | `bash scripts/verify_dev_env.sh` | **7/7 OK** |
+| Aislamiento del entorno (1.ª versión) | `bash scripts/verify_dev_env.sh` | **7/7 OK** |
+| Aislamiento tras la revisión (7 + 3 de permisos del secret) | `bash scripts/verify_dev_env.sh` | **10/10 OK** |
+| Repetición tras la revisión: ruff, unitarios/API, integración | mismos comandos | Sin errores; **32 passed** (96 %); **1 passed** |
+| Imágenes desde el bloqueo | `build --no-cache`; `importlib.metadata` en los contenedores | Versiones idénticas a `uv.lock`; sin `hatchling` ni SDK de Docker en el control plane |
 | Token incorrecto | Petición al agente desde el control plane | 401 |
 | Salida a Internet del agente | Conexión a 1.1.1.1:443 desde el agente | Bloqueada |
 | Cabeceras del panel | `curl -sI http://127.0.0.1:8000/` | Presentes |
@@ -214,8 +229,8 @@ Fase 0: `could not read Username for 'https://github.com'`). Ramas que hay que s
 
 - **Push y CI**: subir las ramas y comprobar que el *workflow* pasa en GitHub.
 - **Revisión visual del panel** por el equipo (<http://127.0.0.1:8000> con el entorno levantado).
-- Permisos del *secret* para producción (ADR-014) y uso del bloqueo de versiones en las imágenes
-  (ADR-013): antes de la Fase 13.
+- Fijar la imagen base `python:3.12-slim` por *digest* (ADR-013): antes del despliegue final.
+- Aplicar en el servidor el mismo esquema de tokens `600` por componente (ADR-014): Fase 13.
 - Timeout de 3 s en `/api/health` con el agente caído: aceptable ahora; se puede reducir o cachear
   cuando el panel tenga más vistas.
 - Aviso de deprecación de Starlette sobre `TestClient` con `httpx`: no afecta; vigilar al actualizar
@@ -242,7 +257,8 @@ primeras vistas del panel (inicio de sesión y lista de aplicaciones).
 
 ### Decisiones que debe registrar
 
-ADR-013, ADR-014 (incluido el matiz de los permisos 644 en desarrollo) y ADR-015.
+ADR-013 (incluida su revisión: imágenes desde el bloqueo con hashes), ADR-014 (incluida la
+limitación de Compose fuera de Swarm y la solución de una copia `600` por componente) y ADR-015.
 
 ### Diagramas
 
@@ -252,7 +268,7 @@ ADR-013, ADR-014 (incluido el matiz de los permisos 644 en desarrollo) y ADR-015
 
 ### Presentación
 
-- Diapositiva «Seguridad desde el primer día»: las 7 comprobaciones de `verify_dev_env.sh` en verde.
+- Diapositiva «Seguridad desde el primer día»: las 10 comprobaciones de `verify_dev_env.sh` en verde (incluidos los permisos `600` del token).
 - Captura del panel «Estado del sistema» (cuando el equipo la haga).
 
 ### Qué NO debe considerar definitivo
@@ -260,5 +276,6 @@ ADR-013, ADR-014 (incluido el matiz de los permisos 644 en desarrollo) y ADR-015
 - El consumo de 83 MiB es una **medida puntual** del esqueleto; no verifica el objetivo de diseño de
   < 250 MB (RNF-07), que se medirá en la Fase 12 con la plataforma completa.
 - El CI aún no se ha ejecutado en GitHub.
-- Los permisos del *secret* y la construcción de imágenes son de **desarrollo**, no de producción.
+- La configuración de Compose es de **desarrollo** (panel en `127.0.0.1`, imagen base sin fijar por
+  *digest*); la de producción se definirá en la Fase 13.
 - No hay todavía despliegue de aplicaciones, base de datos ni autenticación de usuarios.

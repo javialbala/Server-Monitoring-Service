@@ -17,6 +17,15 @@ corresponden con las fases del proyecto.
 - 32 tests unitarios y de API, 1 de integración; CI con GitHub Actions.
 - `docs/guia-desarrollo.md`; ADR-013 (uv), ADR-014 (token), ADR-015 (Python 3.12).
 
+### Cambiado (revisión del equipo)
+
+- Token: una copia por componente con permisos `600` y propietario el UID de su contenedor,
+  directorio `700` (antes un único archivo `644`). `prepare_dev_env.sh --rotate` para renovarlo.
+- Imágenes construidas desde `uv.lock` exportado con hashes (`deploy/requirements/*.txt`,
+  `pip --require-hashes`), sin instalar el paquete ni descargar `hatchling`.
+- `scripts/export_requirements.sh` y comprobación en el CI de que coincide con `uv.lock`.
+- `verify_dev_env.sh` pasa de 7 a 10 comprobaciones (permisos del secret).
+
 ## [Fase 0] — 2026-11-15 (aprobada)
 
 ### Cambiado (tras la revisión del equipo)

@@ -1,6 +1,7 @@
 # Guía de desarrollo local
 
-> Estado: **implementado y verificado en la Fase 1** (2026-11-15). Esta guía cubre solo el entorno de
+> Estado: **implementado y verificado en la Fase 1** (2026-11-15; revisado el mismo día: permisos del
+> token y construcción reproducible de las imágenes). Esta guía cubre solo el entorno de
 > desarrollo local. La instalación en el servidor se documentará en la Fase 13.
 
 **Regla de oro:** todo se ejecuta en tu máquina. Nunca se lanza este entorno contra el servidor real.
@@ -30,7 +31,7 @@ uv run pytest -m integration                   # tests contra el Docker local (s
 ## 2. Levantar el entorno con Docker
 
 ```bash
-bash scripts/prepare_dev_env.sh   # crea deploy/secrets/agent_token y deploy/.env (una vez)
+bash scripts/prepare_dev_env.sh   # crea los tokens (600) y deploy/.env; idempotente
 docker compose --env-file deploy/.env -f deploy/compose.dev.yaml up -d --build --wait
 ```
 
@@ -39,7 +40,7 @@ Abre <http://127.0.0.1:8000>: el panel muestra el estado del control plane, del 
 Para comprobar automáticamente las propiedades de aislamiento:
 
 ```bash
-bash scripts/verify_dev_env.sh          # levanta el entorno y comprueba 7 propiedades
+bash scripts/verify_dev_env.sh          # levanta el entorno y comprueba 10 propiedades
 bash scripts/verify_dev_env.sh --down   # igual, y lo apaga al terminar
 ```
 
@@ -69,13 +70,41 @@ flowchart LR
 
 | Archivo | Lo crea | Contenido |
 |---|---|---|
-| `deploy/secrets/agent_token` | `prepare_dev_env.sh` | Token aleatorio compartido (64 caracteres). Directorio con permisos 700 |
+| `deploy/secrets/` | `prepare_dev_env.sh` | Directorio con permisos **700** |
+| `deploy/secrets/controlplane_token` | `prepare_dev_env.sh` | Token aleatorio (64 caracteres), permisos **600**, propietario UID **10001** |
+| `deploy/secrets/agent_token` | `prepare_dev_env.sh` | El **mismo** token, permisos **600**, propietario UID **10002** |
 | `deploy/.env` | `prepare_dev_env.sh` | `DOCKER_GID` (grupo propietario del socket de Docker) |
 | `.venv/` | `uv sync` | Entorno virtual |
 
-Si borras el token, el script genera uno nuevo; reinicia el entorno para que lo usen ambos procesos.
+Por qué dos copias del token: Compose, sin Swarm, monta cada *secret* con el propietario y los permisos
+del archivo del host e ignora `uid`/`gid`/`mode`. Para que un archivo `600` sea legible dentro del
+contenedor, su propietario tiene que ser el UID del proceso, y los dos componentes tienen UID
+distintos (ADR-014). El script asigna el propietario mediante un contenedor efímero sin red, de modo
+que no hace falta `sudo`.
 
-## 5. Convenciones de código
+Consecuencias prácticas:
+
+- **Tu usuario no puede leer el token** (`cat` da «Permiso denegado»). Es lo esperado.
+- Sí puedes borrarlo, porque el directorio es tuyo. Para cambiar el token:
+  `bash scripts/prepare_dev_env.sh --rotate` y reinicia el entorno.
+- Si los archivos no tienen los permisos o propietarios correctos (por ejemplo, de una versión
+  anterior con `644`), el script los regenera automáticamente.
+
+## 5. Dependencias
+
+`uv.lock` fija las versiones exactas de todas las dependencias. Las imágenes Docker no usan `uv`:
+instalan `deploy/requirements/controlplane.txt` y `deploy/requirements/agent.txt`, exportados de
+`uv.lock` con los hashes SHA-256 de cada paquete (`pip install --require-hashes`). Tras añadir o
+actualizar una dependencia:
+
+```bash
+uv add <paquete>                      # o uv lock --upgrade-package <paquete>
+bash scripts/export_requirements.sh   # regenera deploy/requirements/*.txt
+```
+
+El CI falla si `deploy/requirements/` no coincide con `uv.lock`.
+
+## 6. Convenciones de código
 
 - Identificadores en **inglés**; docstrings y comentarios en **español**, explicando el porqué.
 - Funciones cortas y con una responsabilidad; sin capas que no aporten.
@@ -85,11 +114,12 @@ Si borras el token, el script genera uno nuevo; reinicia el entorno para que lo 
   para poder probarlas con dobles; `build_app_from_env()` es el único punto que lee el entorno real.
 - En el panel: datos siempre con `textContent`, nunca con `innerHTML`; sin CDN.
 
-## 6. Problemas frecuentes
+## 7. Problemas frecuentes
 
 | Síntoma | Causa probable | Solución |
 |---|---|---|
 | `DOCKER_GID ... Define DOCKER_GID en deploy/.env` | No se ha ejecutado el script de preparación | `bash scripts/prepare_dev_env.sh` |
-| El contenedor sale con un error del token | Falta `deploy/secrets/agent_token` o es ilegible | Ejecuta el script de preparación |
+| El contenedor sale con un error del token | Faltan los archivos de `deploy/secrets/` o tienen otro propietario | `bash scripts/prepare_dev_env.sh` (los regenera si no son correctos) |
+| El CI falla en «deploy/requirements está sincronizado» | Se cambió `uv.lock` sin exportar | `bash scripts/export_requirements.sh` y confirma los cambios |
 | El panel muestra «Agente: No disponible» | El agente está parado | `docker compose ... ps` y `logs agent` |
 | El panel muestra «Docker: No disponible» con el agente funcionando | El agente no puede usar el socket (GID incorrecto) | Vuelve a ejecutar el script de preparación y reinicia |
