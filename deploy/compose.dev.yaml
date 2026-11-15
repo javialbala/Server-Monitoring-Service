@@ -11,7 +11,12 @@ networks:
   # Red normal, solo para el control plane (necesaria para publicar su puerto en localhost).
   minipaas-public:
 
+# Un archivo por componente con el MISMO token: cada uno con permisos 600 y propietario el
+# UID de su contenedor (Compose ignora uid/gid/mode fuera de Swarm). Ver ADR-014 y
+# scripts/prepare_dev_env.sh.
 secrets:
+  controlplane_token:
+    file: ./secrets/controlplane_token
   agent_token:
     file: ./secrets/agent_token
 
@@ -27,9 +32,9 @@ services:
     tmpfs: [/tmp]                # único sitio escribible, en memoria
     cap_drop: [ALL]              # sin capabilities de Linux
     security_opt: ["no-new-privileges:true"]   # impide ganar privilegios (setuid...)
-    secrets: [agent_token]
+    secrets: [controlplane_token]
     environment:
-      MINIPAAS_AGENT_TOKEN_FILE: /run/secrets/agent_token
+      MINIPAAS_AGENT_TOKEN_FILE: /run/secrets/controlplane_token
     labels:
       minipaas.component: controlplane   # sin minipaas.managed: el agente no lo gestiona
     healthcheck:
