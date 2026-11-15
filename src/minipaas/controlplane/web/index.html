@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MiniPaaS · Estado del sistema</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <header class="app-header">
+    <h1>MiniPaaS</h1>
+  </header>
+  <main id="view">
+    <section class="card" aria-labelledby="status-title">
+      <h2 id="status-title">Estado del sistema</h2>
+      <ul class="indicators">
+        <li><span class="dot" id="dot-controlplane"></span><span class="name">Control plane</span><span class="state" id="state-controlplane">Comprobando…</span></li>
+        <li><span class="dot" id="dot-agent"></span><span class="name">Agente</span><span class="state" id="state-agent">Comprobando…</span></li>
+        <li><span class="dot" id="dot-docker"></span><span class="name">Docker</span><span class="state" id="state-docker">Comprobando…</span></li>
+      </ul>
+      <button type="button" id="refresh">Actualizar</button>
+    </section>
+  </main>
+  <script src="/js/app.js"></script>
+</body>
+</html>

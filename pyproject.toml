@@ -1,0 +1,45 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "minipaas"
+version = "0.1.0"
+description = "PaaS ligera sobre Docker: control plane sin privilegios y agente con acceso a Docker."
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn>=0.30",  # sin extra [standard]: más ligero
+    "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+# Solo la imagen del agente necesita el SDK de Docker.
+agent = ["docker>=7"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "pytest-cov>=5",
+    "ruff>=0.6",
+    "docker>=7",  # para los tests del agente y de integración
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/minipaas"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S"]
+
+[tool.ruff.lint.per-file-ignores]
+# S101: assert es la forma normal de comprobar en pytest.
+# S105/S106: los tokens de los tests son valores falsos de prueba, no contraseñas reales.
+"tests/**" = ["S101", "S105", "S106"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["integration: requiere Docker local"]
