@@ -66,8 +66,14 @@ def create_app(
         await agent_client.aclose()  # cierra las conexiones HTTP al apagar
 
     # check_origin se aplica a todas las rutas de la API (solo actúa en métodos no seguros).
+    # Sin /docs ni /redoc: esas páginas cargan Swagger/ReDoc desde un CDN (prohibido en el
+    # proyecto y bloqueado por la CSP). Se mantiene /openapi.json, que es un JSON local.
     app = FastAPI(
-        title="MiniPaaS control plane", lifespan=lifespan, dependencies=[Depends(check_origin)]
+        title="MiniPaaS control plane",
+        lifespan=lifespan,
+        dependencies=[Depends(check_origin)],
+        docs_url=None,
+        redoc_url=None,
     )
     app.state.settings = settings
     app.state.db = db

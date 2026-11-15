@@ -111,3 +111,11 @@ def test_agent_client_closed_on_shutdown(tmp_path):
     ):  # el bloque with ejecuta arranque y apagado
         pass
     assert closed == [True]
+
+
+def test_no_cdn_documentation_pages():
+    # /docs y /redoc cargarían recursos de un CDN (prohibido y bloqueado por la CSP).
+    client = make_client(agent_ok)
+    assert client.get("/docs").status_code == 404
+    assert client.get("/redoc").status_code == 404
+    assert client.get("/openapi.json").status_code == 200
