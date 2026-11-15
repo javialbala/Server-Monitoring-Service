@@ -11,7 +11,7 @@ mkdir -p deploy/requirements
 # --frozen: usa uv.lock tal cual, sin volver a resolver.
 # --no-dev: sin pytest, ruff... (no van en las imágenes).
 # --no-emit-project: sin el propio paquete minipaas (se copia como código fuente).
-uv export --frozen --no-dev --no-emit-project --quiet \
+uv export --frozen --no-dev --no-emit-project --quiet --extra controlplane \
     -o deploy/requirements/controlplane.txt
 uv export --frozen --no-dev --no-emit-project --quiet --extra agent \
     -o deploy/requirements/agent.txt
