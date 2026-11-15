@@ -16,19 +16,24 @@ Estos cambios fueron **aprobados por el equipo el 2026-11-15**.
 
 ## 6.2 Fases
 
-Estado a 2026-11-15: Fases 0 y 1 **aprobadas**; Fase 2 **terminada, pendiente de aprobación**; el
+Estado a 2026-11-15: Fases 0, 1 y 2 **aprobadas**; Fase 3 **terminada, pendiente de aprobación**; el
 resto, pendientes.
+
+**Reajuste tras la Fase 3.** Por indicación del enunciado de la Fase 3, se adelantaron partes de las
+Fases 4 y 7: revisiones inmutables, despliegue en segundo plano, rollback automático, catálogo de
+imágenes, varios servicios por aplicación y redes por aplicación. Lo que queda de esas fases se indica
+en sus filas.
 
 | Fase | Nombre | Objetivo y entregables principales | Criterio de aceptación |
 |---|---|---|---|
 | 0 | Análisis y arquitectura | Requisitos, arquitectura, decisiones, riesgos, estrategia de pruebas, documentación inicial. | Documentación revisada y aprobada. |
 | 1 | Estructura y entorno aislado | Estructura de directorios, `pyproject.toml`, `ruff`, `pytest`, Dockerfiles, `compose.dev.yaml` con control plane y agente «hola mundo», CI básica, guía de desarrollo. | `docker compose up` local arranca ambos procesos; el control plane llama al agente; CI en verde; el control plane no ve el socket. |
 | 2 | Control plane, base de datos y API básica | SQLite + esquema y migraciones, modelo de aplicaciones (sin Docker), autenticación, CSRF, auditoría, esqueleto del panel (login + lista de aplicaciones). | CRUD de aplicaciones por API y panel con sesión; tests de API en verde. **Cumplido** (pendiente de aprobación): 214 tests, E2E 12/12, recorrido del panel en navegador. |
-| 3 | Agente runtime y ciclo de vida básico | Agente con política y lista blanca; cliente del agente; crear/arrancar/parar/eliminar una aplicación de un servicio desde imagen; sincronización de estado. | Despliegue real de `nginx:alpine` en local; tests de política; contenedor ajeno protegido. |
-| 4 | Despliegues, imágenes y plantillas | Revisiones inmutables, despliegue en segundo plano, restauración automática ante fallo, *rollback* de la versión de la aplicación (no de los datos), catálogo de plantillas propias. | Redespliegue y *rollback* verificados con test de integración (incluido que los volúmenes no se alteran); advertencia sobre datos visible en el panel; plantilla desplegada desde el panel. |
+| 3 | Motor de despliegue y servicios Docker | Agente con operaciones cerradas; catálogo por digest; servicios; revisiones inmutables; despliegue `recreate` con rollback; redes por aplicación; detener/arrancar/recuperar; operaciones interrumpidas; panel. | **Cumplido** (pendiente de aprobación): E2E con Docker real 23/23, 437 tests, aislamiento 12/12. |
+| 4 | Plantillas y rollback manual | (Revisiones, despliegue en segundo plano y rollback automático: **hechos en la Fase 3**.) Pendiente: volver a desplegar a mano una revisión anterior, plantillas de aplicación con varios servicios, ampliar el catálogo. | Redespliegue y *rollback* verificados con test de integración (incluido que los volúmenes no se alteran); advertencia sobre datos visible en el panel; plantilla desplegada desde el panel. |
 | 5 | Configuración: variables y puertos | Variables de entorno y secretos; publicación de puertos en rango; detección de conflictos. | Secretos nunca devueltos por la API; conflicto de puertos detectado antes de desplegar. |
 | 6 | Almacenamiento persistente | Volúmenes con nombre, persistencia entre despliegues, tamaño ocupado, borrado con confirmación, exportación opcional. | Dato escrito sobrevive a un redespliegue (test). |
-| 7 | Redes y aplicaciones multi-servicio | Red privada por aplicación, varios servicios por aplicación, resolución por nombre, URL de acceso; proxy inverso opcional. | Plantilla web + base de datos funcional; dos aplicaciones no se ven entre sí (test). |
+| 7 | Acceso a las aplicaciones | (Red privada por aplicación, varios servicios, resolución por nombre y URL de acceso: **hechos en la Fase 3**.) Pendiente: proxy inverso opcional con nombres (RF-52) y reglas de cortafuegos para la red de publicación. | Proxy inverso funcional si se aborda; riesgo de la red de publicación mitigado o aceptado. |
 | 8 | Monitorización, logs y health checks | Logs, consumo por servicio, health checks, métricas del host, historial corto con Chart.js. | Datos coherentes con `docker stats`; contenedor no sano detectado. |
 | 9 | Recursos y ciclo de vida | Límites obligatorios, cuota global, políticas de reinicio, reconciliación tras reinicio del servidor. | Límite efectivo comprobado (`docker inspect`); estado correcto tras reiniciar Docker. |
 | 10 | Experiencia de usuario | Revisión completa de la interfaz: coherencia, textos, errores, confirmaciones, accesibilidad básica, diseño adaptable. | Lista de comprobación de usabilidad superada; prueba con un usuario sin conocimientos de Docker. |

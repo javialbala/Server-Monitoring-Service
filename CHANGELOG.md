@@ -3,7 +3,35 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Las versiones se
 corresponden con las fases del proyecto.
 
-## [Fase 2] — 2026-11-15 (pendiente de aprobación)
+## [Fase 3] — 2026-11-15 (pendiente de aprobación)
+
+### Añadido
+
+- Catálogo cerrado de imágenes fijadas por digest (NGINX sin privilegios, whoami) y entradas de
+  prueba para fallos controlados (`common/catalog.py`).
+- Protocolo control plane–agente con modelos estrictos (`common/agent_protocol.py`).
+- Agente: operaciones cerradas sobre Docker, validación independiente, propiedad por etiquetas e
+  instancia, contenedores endurecidos, dos redes por aplicación, sonda de salud efímera.
+- Control plane: servicios, revisiones inmutables (migración 0002), motor `recreate` con verificación
+  de salud y rollback automático, detener/arrancar/recuperar, borrado con retirada de recursos,
+  recuperación de operaciones interrumpidas, exclusión mutua por aplicación, auditoría del ciclo.
+- Panel: servicios, despliegue con seguimiento, estado real, historial con bitácora, acciones.
+- `scripts/e2e_phase3.sh` (23 comprobaciones con Docker real); 437 tests; ADR-025 a ADR-035.
+
+### Cambiado
+
+- `compose.dev.yaml`: variables `MINIPAAS_INSTANCE`, `MINIPAAS_PUBLISH_ADDRESS` y
+  `MINIPAAS_ENABLE_TEST_CATALOG`.
+- `DELETE /api/applications/{slug}` retira antes los recursos Docker de la aplicación.
+- Hoja de ruta: partes de las Fases 4 y 7 adelantadas a la Fase 3.
+
+### Corregido
+
+- Al apagar el control plane durante un despliegue, la operación se marcaba como fallida (los
+  clientes HTTP se cerraban con el motor aún trabajando). Ahora se abandona sin juzgarla y se marca
+  como interrumpida al arrancar.
+
+## [Fase 2] — 2026-11-15 (aprobada)
 
 ### Añadido
 

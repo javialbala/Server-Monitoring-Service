@@ -1,7 +1,7 @@
 # Guía de desarrollo local
 
-> Estado: **implementado y verificado** en las Fases 1 y 2 (2026-11-15). La Fase 2 añade la base de
-> datos persistente, el administrador y la prueba extremo a extremo. Esta guía cubre solo el entorno de
+> Estado: **implementado y verificado** en las Fases 1 a 3 (2026-11-15). La Fase 2 añade la base de
+> datos y el administrador; la Fase 3, el despliegue de servicios y su prueba extremo a extremo. Esta guía cubre solo el entorno de
 > desarrollo local. La instalación en el servidor se documentará en la Fase 13.
 
 **Regla de oro:** todo se ejecuta en tu máquina. Nunca se lanza este entorno contra el servidor real.
@@ -79,11 +79,34 @@ docker compose --env-file deploy/.env -f deploy/compose.dev.yaml down
 
 El proyecto Compose se llama `minipaas-dev`; `down` solo afecta a sus contenedores y redes.
 
+### Variables de entorno del entorno de desarrollo
+
+| Variable | Defecto | Efecto |
+|---|---|---|
+| `MINIPAAS_PORT` | `8000` | Puerto del panel en `127.0.0.1` |
+| `MINIPAAS_INSTANCE` | `dev` | Instancia del agente: forma parte de los nombres y etiquetas de los recursos de aplicación (ADR-035) |
+| `MINIPAAS_PUBLISH_ADDRESS` | `127.0.0.1` | Dirección del host en la que se publican los servicios. `0.0.0.0` los expondría a la red: decisión del administrador del servidor |
+| `MINIPAAS_ENABLE_TEST_CATALOG` | `false` | Muestra las entradas de prueba del catálogo (`test-crash`, `test-unhealthy`). Solo para pruebas |
+
+### Probar un despliegue a mano
+
+1. En el panel, abre una aplicación y pulsa «Añadir servicio»: por ejemplo, «Servicio HTTP de
+   prueba (whoami)» con «Publicar para acceder desde el navegador».
+2. Pulsa «Desplegar» y espera a «Funcionando». En «Estado real», «Abrir» lleva a
+   `http://127.0.0.1:2000X/`.
+3. Los recursos de las aplicaciones se ven con
+   `docker ps --filter label=minipaas.instance=dev` (no los modifiques a mano: usa el panel).
+
 ### Prueba extremo a extremo
 
 ```bash
-bash scripts/e2e_phase2.sh
+bash scripts/e2e_phase3.sh   # Fase 3: despliegues reales, aislamiento, rollback, reinicio (~4 min)
+bash scripts/e2e_phase2.sh   # Fase 2: login, CSRF y persistencia
 ```
+
+`e2e_phase3.sh` usa el proyecto separado `minipaas-e2e` (instancia `e2e`, puerto 8010, catálogo de
+prueba activado) y al terminar elimina sus contenedores, redes, volúmenes e imágenes y los recursos de
+aplicación de la instancia `e2e`. No toca el entorno `dev` ni recursos ajenos (lo comprueba).
 
 Levanta un proyecto Compose **separado** (`minipaas-e2e`, puerto 8010) para no tocar tu base de datos
 de desarrollo, y comprueba: creación del administrador (y que no se sobrescribe), login, 401 sin
@@ -170,3 +193,7 @@ El CI falla si `deploy/requirements/` no coincide con `uv.lock`.
 | «Demasiados intentos fallidos» al iniciar sesión | 5 fallos en 15 minutos desde esa IP o con ese usuario | Espera a que pase la ventana o reinicia el control plane (el contador está en memoria) |
 | `ModuleNotFoundError: argon2` o `docker` al ejecutar los tests | Se instaló el entorno sin extras | `uv sync --all-extras` |
 | `create-admin` responde «Ya existe un administrador» | Ya se creó antes | Es el comportamiento esperado: nunca se sobrescribe |
+| Un despliegue termina en «Fallida · versión anterior recuperada» | Un servicio no arrancó o no respondió a la comprobación de salud | «Ver detalles» en el historial muestra el paso y el motivo |
+| La aplicación queda en «Requiere intervención» | Falló también la recuperación, el agente no respondía o se reinició el control plane a mitad | Cuando el agente funcione, pulsa «Recuperar» |
+| «El puerto N ya está asignado a otro servicio» | Otro servicio (o la revisión activa de otra app) lo usa | Deja el puerto vacío para que se asigne uno libre |
+| El despliegue falla con «port is already allocated» | Un proceso del host ajeno a MiniPaaS usa ese puerto | Elige otro puerto del rango |

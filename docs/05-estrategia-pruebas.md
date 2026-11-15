@@ -58,6 +58,15 @@ ninguna prueba que no se haya ejecutado.
 Todas las pruebas que tocan la base de datos usan un archivo temporal (`tmp_path`); ninguna usa la
 base de datos de desarrollo.
 
+### Pruebas añadidas en la Fase 3
+
+| Nivel | Archivos | Qué cubren |
+|---|---|---|
+| API del agente (doble del SDK) | `tests/api/test_agent_api.py` (102), `tests/unit/test_agent_operations.py`, `test_agent_config.py` | Token, rutas inexistentes, catálogo no autorizado o de prueba sin permiso, arquitectura, digest, puertos, variables, campos extra (`privileged`, `command`, `image`), propiedad (sin etiquetas, otra app, otra instancia), idempotencia, configuración construida, errores 502/503, variables nunca en logs |
+| Integración del agente con Docker real | `tests/integration/test_agent_docker.py` (7) | Imágenes y digest, redes (`internal` y sin NAT), dos servicios, sonda, acceso desde el host, aislamiento entre apps, sin Internet, endurecimiento por `docker inspect`, detener/arrancar, `test-crash` y `test-unhealthy`, contenedor ajeno protegido, limpieza |
+| API del control plane (agente falso) | `test_catalog_api.py`, `test_services_api.py` (41), `test_deployments_api.py`, `test_deploy_failures_api.py`, `test_lifecycle_api.py`; `tests/unit/test_cp_*.py` | Migración 0002 sobre datos de la Fase 2, *trigger* e índice; servicios y puertos; revisiones e idempotencia; motor (éxito, fallos de descarga/creación/arranque/salud, *timeout*, rollback correcto y fallido, sin versión anterior, apagado durante un despliegue); concurrencia con hilos; reinicio y recuperación; detener/arrancar; borrado con agente; auditoría sin valores de variables |
+| Extremo a extremo | `scripts/e2e_phase3.sh` + `e2e_phase3.py` | 23 comprobaciones con contenedores reales en un proyecto separado (ver `registro-pruebas.md`) |
+
 ## 5.6 Integración continua
 
 Un *workflow* de GitHub Actions que ejecute `ruff` y las pruebas unitarias y de API en cada *push* y

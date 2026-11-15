@@ -217,6 +217,10 @@ los despliegues que quedaron `pending/deploying` y el sincronizador muestra el e
 
 ## 3.6 API del agente (borrador)
 
+> Borrador de la Fase 0. La API **implementada** en la Fase 3 está en el apartado 3.11 y en
+> `src/minipaas/common/agent_protocol.py`; difiere en los nombres de rutas y en que la sonda de salud
+> es un contenedor efímero (ADR-030).
+
 API HTTP interna, accesible solo desde la red Docker interna de MiniPaaS, autenticada con un token
 compartido generado en la instalación. Operaciones previstas (lista cerrada):
 
@@ -418,3 +422,153 @@ La base de datos (`/data/minipaas.sqlite3`, modo WAL) está en el volumen con no
 control plane; la imagen crea `/data` con propietario UID 10001 para que el volumen se inicialice con
 los permisos correctos. El sistema de archivos raíz sigue en solo lectura. El agente no cambia en esta
 fase y no tiene acceso a la base de datos.
+
+## 3.11 Implementación de la Fase 3: motor de despliegue
+
+> Estado: **implementado y verificado con Docker real** (2026-11-15).
+
+### Topología en ejecución
+
+```mermaid
+flowchart TB
+    B[Navegador] -- "127.0.0.1:8000" --> CP[controlplane<br/>motor de despliegue · SQLite]
+    CP -- "HTTP + token · red minipaas-internal" --> AG[agent<br/>catálogo · política · Docker SDK]
+    AG -- socket --> D[Docker Engine]
+    subgraph APP["Aplicación «tienda» (instancia dev)"]
+      direction LR
+      W[web · whoami<br/>UID 65534] --- NI((minipaas-dev-tienda<br/>internal: sin salida))
+      S[static · nginx<br/>UID 101] --- NI
+      W --- NE((minipaas-dev-tienda-edge<br/>sin NAT de salida))
+      P[sonda efímera] -. "GET http://web:80/health" .- NI
+    end
+    D --> APP
+    H[Host 127.0.0.1:20000] -- "puerto publicado" --> NE
+```
+
+- Todos los servicios están en la red **interna** (`internal`), donde se resuelven por su nombre.
+- Solo los servicios publicados se conectan además a la red **edge** (*bridge* sin NAT de salida),
+  necesaria porque Docker no publica puertos desde redes `internal` (ADR-031).
+- La **sonda** la crea el agente en la red interna para comprobar la salud y se elimina después
+  (ADR-030).
+- El control plane sigue sin acceso a Docker; el agente sigue en su red interna sin salida y sin
+  puertos.
+
+### Componentes nuevos
+
+| Componente | Archivo | Responsabilidad |
+|---|---|---|
+| Catálogo | `common/catalog.py` | Entradas autorizadas (digest, puertos, variables, salud, recursos, usuario, tmpfs) y validación compartida |
+| Protocolo | `common/agent_protocol.py` | Rutas y modelos Pydantic estrictos entre control plane y agente; plazos por operación |
+| Nombres | `common/naming.py` | Etiquetas de propiedad, formatos y nombres deterministas de redes y contenedores |
+| Política del agente | `agent/operations.py` | Propiedad por etiquetas, validación independiente, construcción de contenedores, sonda, limpieza |
+| Cliente síncrono | `controlplane/agent_runtime_client.py` | Una función por ruta; errores tipados (`AgentUnavailable`, `AgentRejected`, `AgentDockerError`) |
+| Servicios | `controlplane/services/app_services.py` | Configuración de servicios y asignación de puertos |
+| Revisiones | `controlplane/services/deployments.py` | Crear revisiones (deduplicadas por `request_id`) y solicitar despliegues |
+| Motor | `controlplane/services/deploy_engine.py` | Despliegue `recreate`, verificación de salud, rollback, candados por aplicación |
+| Ciclo de vida | `controlplane/services/app_lifecycle.py` | Detener, arrancar, recuperar, borrar, estado real, operaciones interrumpidas |
+
+### Modelo de datos tras la migración `0002`
+
+```mermaid
+erDiagram
+    APPLICATIONS ||--o{ SERVICES : "configura"
+    APPLICATIONS ||--o{ DEPLOYMENTS : "historial de revisiones"
+    APPLICATIONS |o--o| DEPLOYMENTS : "active_deployment_id"
+    DEPLOYMENTS ||--|{ DEPLOYMENT_SERVICES : "configuración inmutable"
+    DEPLOYMENTS ||--o{ DEPLOYMENT_EVENTS : "bitácora"
+    DEPLOYMENTS |o--o| DEPLOYMENTS : "previous_deployment_id"
+    DEPLOYMENT_STATUSES ||--o{ DEPLOYMENTS : "clasifica"
+    APPLICATION_STATUSES ||--o{ APPLICATIONS : "clasifica"
+
+    SERVICES { int id PK
+               int application_id FK
+               text name "único en la app"
+               text catalog_id
+               int internal_port
+               int host_port UK "20000-20999 o NULL"
+               text env "JSON"
+               int memory_mb
+               real cpus }
+    DEPLOYMENTS { int id PK
+                  int application_id FK
+                  int revision "único en la app"
+                  text operation_id UK "UUID4, etiqueta Docker"
+                  text request_id "deduplicación"
+                  text status FK
+                  int previous_deployment_id FK
+                  text error "resumen no sensible" }
+    DEPLOYMENT_SERVICES { int id PK
+                          int deployment_id FK
+                          text service_name
+                          text image_ref "repo@sha256"
+                          int internal_port
+                          int host_port
+                          text env
+                          int memory_mb
+                          real cpus }
+    DEPLOYMENT_EVENTS { int id PK
+                        int deployment_id FK
+                        text step
+                        text outcome
+                        text message }
+```
+
+Reglas: borrar una aplicación borra en cascada sus servicios, revisiones y eventos (la auditoría
+conserva el rastro), pero solo después de que el agente haya retirado sus contenedores y redes. Un
+*trigger* impide modificar `deployment_services`. El índice parcial `one_operation_per_app` impide dos
+operaciones simultáneas por aplicación.
+
+### Flujo de un despliegue
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor A as Administrador
+    participant CP as Control plane (motor)
+    participant AG as Agente
+    participant D as Docker
+
+    A->>CP: POST /revisions {request_id} → revisión N (pending, configuración copiada)
+    A->>CP: POST /revisions/N/deploy → 202 (preparing; el índice impide otra operación)
+    CP->>AG: GET /catalog (mismos digest, arquitectura soportada)
+    CP->>AG: POST /images/ensure · POST /apps/{slug}/networks
+    AG->>D: pull por digest (si falta) y verificación de RepoDigests · redes
+    CP->>AG: stop de la revisión anterior (NO se borra)
+    loop cada servicio
+        CP->>AG: POST /containers (operation_id, idempotente) · start
+        AG->>AG: valida catálogo y construye la configuración segura
+    end
+    loop hasta el plazo de salud
+        CP->>AG: GET /containers (estado real) · POST …/probe
+    end
+    alt todos sanos
+        CP->>CP: N healthy, anterior superseded, app running (una transacción + auditoría)
+        CP->>AG: cleanup de la operación anterior
+    else algún fallo
+        CP->>AG: cleanup SOLO de la operación N
+        CP->>AG: start de la revisión anterior + verificación
+        CP->>CP: N rolled_back (o rollback_failed → app «Requiere intervención»)
+    end
+```
+
+### Tres estados
+
+| Concepto | Dónde vive | Valores |
+|---|---|---|
+| Estado lógico de la aplicación | `applications.status` | `draft`, `running`, `stopped`, `attention` |
+| Estado del despliegue | `deployments.status` | `pending` → `preparing` → `deploying` → `healthy` / `rolling_back` → `rolled_back` / `rollback_failed`; `failed`, `stopped`, `superseded`, `discarded`, `interrupted` |
+| Estado real de los contenedores | Docker, a través del agente | `running`, `exited`, `created`, `restarting`, `paused`, `dead`, `removing` |
+
+### Situaciones de fallo
+
+| Situación | Comportamiento |
+|---|---|
+| Falla un servicio (descarga, creación, arranque, salud) | Rollback automático a la revisión anterior (ADR-033) |
+| No había revisión anterior | Revisión `failed`; se borran sus contenedores y redes; la aplicación sigue «Sin desplegar» |
+| Falla también el rollback | `rollback_failed`; aplicación «Requiere intervención»; botón «Recuperar» |
+| El agente deja de responder | La operación falla (sin suponer que Docker no actuó); si tampoco se puede recuperar, «Requiere intervención» |
+| *Timeout* tras una acción que Docker sí hizo | La limpieza por `operation_id` elimina lo que se llegara a crear |
+| Se reinicia el control plane a mitad | Al apagar, el motor abandona la operación sin juzgarla; al arrancar, pasa a `interrupted` y se recupera la última revisión buena (ADR-034) |
+| Petición repetida | Mismo `request_id` → misma revisión; segundo `deploy` → estado actual; misma operación en el agente → mismo contenedor |
+| Dos despliegues simultáneos | El segundo recibe 409 |
+| Se detiene la aplicación | Se paran sus contenedores (no se borran); la revisión activa pasa a `stopped` |

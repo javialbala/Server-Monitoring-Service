@@ -114,3 +114,67 @@ Errores encontrados y corregidos durante la revisión:
    descartarlo.
 
 No ejecutado: CI en GitHub (sin *push* en esta fase, por indicación del usuario).
+
+## Fase 3 — Motor de despliegue y servicios Docker (2026-11-15)
+
+Entorno: Python 3.12 (`uv sync --all-extras`), Docker 29.9.2 (x86_64), Compose 5.6.1. Las pruebas
+destructivas usan instancias y proyectos separados (`itest`, `e2e`, `ui`); el entorno `dev` solo se
+usó para `verify_dev_env.sh`.
+
+### Pruebas exploratorias previas al diseño (scripts temporales, recursos etiquetados `minipaas.test=true` y eliminados)
+
+| # | Prueba | Resultado real |
+|---|---|---|
+| 3.1 | `docker manifest inspect` de las candidatas | `nginxinc/nginx-unprivileged:1.29-alpine` (8 arquitecturas) y `traefik/whoami:v1.11` (amd64, arm64, arm/v7) existen |
+| 3.2 | `docker pull` + `docker image inspect` | Digest del índice: nginx `sha256:0c79d56a…7fbe6` (versión 1.29.8-alpine, usuario 101, puerto 8080, licencia Apache-2.0); whoami `sha256:20068979…937ab` (v1.11.0, sin usuario → root por defecto, puerto 80, imagen *scratch* sin herramientas) |
+| 3.3 | Perfil endurecido (`--read-only --cap-drop ALL --security-opt no-new-privileges --pids-limit --memory --cpus --user`) | Ambas arrancan; nginx necesita `tmpfs /tmp`; whoami escucha en el 80 como UID 65534; consumo 7,2 y 1,4 MiB |
+| 3.4 | Sonda `wget` (imagen nginx) en una red `internal` | Alcanza `nginx:8080/` y `whoami:80/health`; desde otra red: «bad address»; hacia `1.1.1.1`: «Network unreachable»; sin socket de Docker dentro |
+| 3.5 | Fallos controlados | nginx sin tmpfs: `Exited (1)` («mkdir() /tmp/proxy_temp failed (Read-only file system)»); con 6 MiB de memoria NO falla (descartado como fallo controlado) |
+| 3.6 | Puerto publicado desde una red `internal` | El host no recibe respuesta (`000`); la opción `gateway_mode_ipv4=isolated` «can only be used for an internal network» |
+| 3.7 | Red *bridge* con `enable_ip_masquerade=false` | Puerto publicado → 200; sin salida a Internet; otra red no alcanza ni por DNS ni por IP |
+| 3.8 | TCP hacia el host desde esa red | Puertos publicados por Docker (5432, 22000): cerrados; proceso del host en todas las interfaces (1716): **abierto**; desde red `internal`: cerrado → riesgo residual documentado (ADR-031) |
+| 3.9 | `WHOAMI_NAME` | La respuesta incluye `Name: prueba-env`; `/health` → 200 |
+
+### Pruebas de la implementación
+
+| # | Prueba | Comando | Resultado real |
+|---|---|---|---|
+| 3.10 | Estilo | `uv run ruff check .`; `uv run ruff format --check .` | `All checks passed!`; 108 archivos |
+| 3.11 | Suite completa | `uv run pytest --cov=minipaas` | **437 passed** (≈ 76 s); cobertura total **98 %** (2 768 sentencias, 60 sin cubrir; `agent/operations.py` 96 %, `deploy_engine.py` 94 %, `app_lifecycle.py` 97 %) |
+| 3.12 | Integración con Docker real | `uv run pytest -m integration` | **8 passed** (7 del agente + 1 de `ping`); 0 contenedores y 0 redes `itest` después |
+| 3.13 | Aislamiento del entorno `dev` | `bash scripts/verify_dev_env.sh` | **12/12 OK**; base de datos de desarrollo migrada a la versión 2 (`manage db-version`); agente sin `argon2`, control plane sin SDK de Docker |
+| 3.14 | E2E (1.ª ejecución) | `bash scripts/e2e_phase3.sh` | Error del propio script: nombre de servicio «x» rechazado (mínimo 2 caracteres) → corregido |
+| 3.15 | E2E (2.ª) | ídem | **22/22 OK** |
+| 3.16 | E2E con reinicio del control plane (3.ª) | ídem, con el paso 13 añadido | **22/23**: tras `restart` durante un despliegue, la revisión quedó `rollback_failed` en vez de `interrupted` (**fallo real**, ver abajo) |
+| 3.17 | E2E tras la corrección (4.ª) | ídem | **23/23 OK**; después: 0 contenedores, 0 redes, 0 volúmenes y 0 imágenes `e2e` |
+| 3.18 | Recorrido del panel en navegador | Chromium *headless* + Playwright (temporal) contra un proyecto separado (`minipaas-ui`, instancia `ui`, puerto 8020) | Alta de aplicación y de dos servicios por formulario; despliegue con panel de progreso → «Revisión activa: r1» y enlace «Abrir»; detener y arrancar; servicio `test-crash` → historial «Fallida · versión anterior recuperada», motivo y bitácora; **0 peticiones a la API en 8 s sin operación en curso**; móvil 390 px en modo oscuro; sin errores de JavaScript. Proyecto y recursos `ui` eliminados |
+
+Comprobaciones del E2E (3.17), todas con contenedores reales:
+
+1. Inicio de sesión · 2. alta de aplicación · 3. dos servicios (whoami publicado con puerto asignado
+automáticamente 20000 + NGINX interno) · 4. variable no autorizada → 422 · 5. revisión 1 `healthy` ·
+6. ambos en ejecución · 7. el servicio publicado responde desde el host con `Name: e2e` · 8. el
+interno no se publica · 9. comunicación por nombre `http://static:8080` · 10. sin salida a Internet ·
+11. contenedores sin montajes, solo lectura, sin privilegios, con límites, usuario no root y
+etiquetas · 12. otra aplicación no alcanza los servicios (ni por nombre ni por IP) · 13. detener ·
+14. arrancar · 15. revisión 2 con `test-crash` → `rolled_back`, r1 activa y respondiendo, sin restos
+de la operación · 16. revisión 3 con `test-unhealthy` → `rolled_back` · 17–18. primera versión
+fallida en otra app → `failed`, sin contenedores ni redes · 19. historial r3/r2 recuperadas, r1
+activa · 20. bitácora con el fallo · 21. reinicio del control plane durante un despliegue →
+`interrupted`, app `running` con r1, sin contenedores de la operación cortada · 22. borrar las
+aplicaciones retira contenedores y redes · 23. los contenedores ajenos no cambian.
+
+Errores encontrados y corregidos en la integración:
+
+1. **Apagado durante un despliegue** (3.16): el *lifespan* cerraba el cliente HTTP del agente mientras
+   el motor seguía verificando; los errores de «cliente cerrado» se trataban como un fallo real y se
+   intentaba un rollback que también fallaba. Corrección: evento `stopping` que el apagado activa
+   primero; el motor lo comprueba en cada espera y abandona la operación sin juzgarla; las esperas
+   reales son interrumpibles; el apagado espera al hilo antes de cerrar los clientes. Test nuevo
+   `test_shutdown_during_deploy_abandons_without_judging` y E2E 23/23.
+2. **Validación de variables en el panel**: el patrón del catálogo se comprobaba sin anclar (aceptaba
+   valores con caracteres extra que el servidor rechazaba). Ahora se ancla igual que `fullmatch`.
+
+No ejecutado: CI en GitHub (sin *push*); reinicio del **agente** a mitad de un despliegue con Docker
+real (cubierto con el agente falso: «agente perdido en pleno despliegue» y «durante el rollback»);
+despliegue en arquitecturas distintas de amd64.

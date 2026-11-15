@@ -7,11 +7,11 @@ Trabajo de la asignatura *Gestión de Sistemas de Archivos y Servicios Distribui
 Título provisional: *«Diseño e implementación de una plataforma PaaS ligera para el despliegue y
 gestión de aplicaciones distribuidas»*.
 
-> **Estado actual: Fase 2 (persistencia, aplicaciones, autenticación y auditoría) terminada,
-> pendiente de aprobación.** El panel tiene inicio de sesión de un único administrador y permite
-> registrar, consultar, editar y eliminar aplicaciones, que se guardan en SQLite. **Todavía no se
-> pueden desplegar aplicaciones** (empieza en la Fase 3); las capacidades descritas abajo son
-> objetivos de las fases siguientes.
+> **Estado actual: Fase 3 (motor de despliegue) terminada, pendiente de aprobación.** Desde el panel
+> se configuran aplicaciones con varios servicios de un catálogo cerrado de imágenes (fijadas por
+> digest), se despliegan en Docker como revisiones inmutables, se detienen y arrancan, y si un
+> despliegue falla se recupera automáticamente la versión anterior. **Todavía no hay** volúmenes
+> persistentes, métricas, logs ni políticas de reinicio: son fases posteriores.
 
 ## ¿Qué es?
 
@@ -58,10 +58,19 @@ Panel: <http://127.0.0.1:8000>. No hay credenciales por defecto: el administrado
 [docs/guia-desarrollo.md](docs/guia-desarrollo.md). La instalación en el servidor se documentará en
 la Fase 13.
 
+## Catálogo de servicios
+
+| Servicio | Imagen (fijada por digest) | Uso |
+|---|---|---|
+| Servidor web estático (NGINX) | `nginxinc/nginx-unprivileged` 1.29.8-alpine | Página web estática (sin contenido propio hasta la Fase 6) |
+| Servicio HTTP de prueba (whoami) | `traefik/whoami` v1.11.0 | Probar despliegue, acceso y comunicación entre servicios |
+
 ## Seguridad
 
 La plataforma no usa contenedores privilegiados, no da acceso al socket de Docker al componente
 expuesto a la red, no permite ejecutar comandos arbitrarios y solo actúa sobre recursos etiquetados
 como propios. El panel exige sesión (contraseñas con Argon2id, sesiones revocables en servidor,
-protección CSRF, límite de intentos) y registra las operaciones en un log de auditoría. Ver
+protección CSRF, límite de intentos) y registra las operaciones en un log de auditoría. Las
+aplicaciones se ejecutan sin root, con la raíz en solo lectura, sin capacidades, con límites de
+recursos y en redes privadas sin salida a Internet. Ver
 [docs/04-seguridad.md](docs/04-seguridad.md).

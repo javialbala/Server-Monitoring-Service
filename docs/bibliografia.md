@@ -39,6 +39,17 @@
 - SQLite. *SQLite Foreign Key Support*. https://www.sqlite.org/foreignkeys.html
 - argon2-cffi. *Documentation*. https://argon2-cffi.readthedocs.io/
 
+## Motor de despliegue (Fase 3)
+
+- Docker Inc. *Networking: bridge network driver* (redes `internal`, opciones del *bridge*).
+  https://docs.docker.com/engine/network/drivers/bridge/
+- Docker Inc. *Packet filtering and firewalls* (publicación de puertos e iptables).
+  https://docs.docker.com/engine/network/packet-filtering-firewalls/
+- Docker Inc. *Image digests* (referencias inmutables). https://docs.docker.com/reference/cli/docker/image/pull/
+- Docker SDK for Python 7.2. *Containers, Networks, Images*. https://docker-py.readthedocs.io/
+- nginx/docker-nginx-unprivileged. https://github.com/nginx/docker-nginx-unprivileged
+- traefik/whoami. https://github.com/traefik/whoami
+
 ## Plataformas de referencia
 
 - Red Hat. *OpenShift Container Platform documentation*. https://docs.redhat.com/ (sección OpenShift)
@@ -69,6 +80,8 @@
 | argon2-cffi 25.1.0 | Hash de contraseñas Argon2id (control plane) | MIT | 2 |
 | argon2-cffi-bindings 26.2.0, cffi 2.1.1, pycparser 3.12 | Dependencias indirectas de argon2-cffi | MIT, MIT-0, BSD-3-Clause | 2 |
 | Imagen `python:3.12-slim` | Base de las imágenes Docker | Licencia PSF + paquetes Debian | 1 |
+| Imagen `nginxinc/nginx-unprivileged:1.29.8-alpine` (`sha256:0c79d56a…7fbe6`) | Entrada «Servidor web estático» del catálogo y sonda de salud. Se ejecuta, no se redistribuye | Dockerfiles: Apache-2.0 (etiqueta `org.opencontainers.image.licenses`); NGINX: BSD-2-Clause; Alpine y paquetes: licencias de cada proyecto | 3 |
+| Imagen `traefik/whoami:v1.11.0` (`sha256:20068979…937ab`) | Entrada «Servicio HTTP de prueba» del catálogo | Apache-2.0 | 3 |
 
 No se ha copiado ni adaptado código de terceros: solo se usan como dependencias. Versiones exactas
 en `uv.lock`. Licencias comprobadas en los metadatos de los paquetes instalados

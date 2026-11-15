@@ -35,6 +35,17 @@ Estados posibles:
 | 022 | Auditoría transaccional con metadatos filtrados | Aceptada (Fase 2) |
 | 023 | Estado lógico de la aplicación en tabla de códigos; slug inmutable; borrado definitivo | Aceptada (Fase 2) |
 | 024 | Limitación de intentos de login en memoria | Aceptada (Fase 2) |
+| 025 | Modelo de servicios: configuración separada de los contenedores | Aceptada (Fase 3) |
+| 026 | Catálogo cerrado de imágenes definido en el backend | Aceptada (Fase 3) |
+| 027 | Imágenes identificadas por digest SHA-256 del índice | Aceptada (Fase 3) |
+| 028 | Despliegues como revisiones numeradas e inmutables | Aceptada (Fase 3) |
+| 029 | Protocolo y operaciones permitidas del agente | Aceptada (Fase 3) |
+| 030 | Comprobación de salud mediante sonda efímera en la red interna | Aceptada (Fase 3) |
+| 031 | Dos redes por aplicación: interna y de publicación sin NAT de salida | Aceptada (Fase 3) |
+| 032 | Asignación de puertos de acceso en el rango 20000–20999 | Aceptada (Fase 3) |
+| 033 | Estrategia `recreate` con rollback automático a contenedores conservados | Aceptada (Fase 3) |
+| 034 | Exclusión mutua y recuperación de operaciones interrumpidas | Aceptada (Fase 3) |
+| 035 | Instancias de MiniPaaS sobre el mismo Docker | Aceptada (Fase 3) |
 
 ### Historial de aprobaciones
 
@@ -496,3 +507,200 @@ externo (fail2ban, etc.; fuera del alcance).
 **Limitaciones aceptadas.** El contador se pierde al reiniciar el control plane (el atacante no puede
 provocar ese reinicio) y solo es válido con un único proceso de uvicorn, que es la configuración del
 proyecto. Detrás de un proxy inverso habrá que tomar la IP real de una cabecera de confianza.
+
+## ADR-025 · Modelo de servicios: configuración separada de los contenedores
+
+**Contexto.** Una aplicación puede tener varios servicios (ADR-007). Docker trabaja con contenedores.
+
+**Problema.** Si el modelo guardara contenedores, el usuario gestionaría Docker y cada cambio de
+configuración alteraría lo que está en ejecución.
+
+**Alternativas.** (a) Guardar contenedores e identificadores de Docker; (b) **servicio = configuración
+deseada** (tabla `services`) y contenedor = instancia de un servicio en una revisión concreta.
+
+**Decisión.** (b). `services` guarda nombre (único en la app), entrada del catálogo, puerto interno,
+publicación, variables permitidas, memoria y CPU. Los contenedores no existen en la base de datos: se
+consultan al agente (estado real) y se identifican por etiquetas (`app`, `service`, `revision`,
+`operation`). Nombre y tipo del servicio son inmutables; el resto se puede editar y se aplica en el
+siguiente despliegue.
+
+**Consecuencias.** Editar un servicio no afecta a lo que está en marcha ni al historial. Borrar un
+servicio que forma parte de la revisión en funcionamiento no se permite (hay que detener o desplegar
+sin él).
+
+## ADR-026 · Catálogo cerrado de imágenes definido en el backend
+
+**Contexto.** Ejecutar una imagen arbitraria es ejecutar código arbitrario con acceso a la red y a los
+recursos del servidor.
+
+**Problema.** Permitir desplegar servicios útiles sin permitir imágenes, comandos ni opciones libres.
+
+**Alternativas.** (a) Nombre de imagen libre con lista negra; (b) lista de registros permitidos;
+(c) **catálogo cerrado en código** (`common/catalog.py`) con capacidades por entrada.
+
+**Decisión.** (c). Cada entrada define imagen y digest, arquitecturas, puertos internos, si puede
+publicar, variables permitidas (con patrón de validación), comprobación de salud, rangos de memoria y
+CPU, límite de procesos, usuario no root, almacenamiento temporal, licencia, origen y limitaciones. El
+usuario solo elige un identificador. Control plane y agente importan el mismo módulo, pero **cada uno
+valida por su cuenta**: el agente no confía en el control plane. Catálogo inicial: NGINX sin
+privilegios y `traefik/whoami`, ambos sin estado. Dos entradas de prueba (`test-crash`,
+`test-unhealthy`) provocan fallos controlados y solo existen con `MINIPAAS_ENABLE_TEST_CATALOG=true`.
+
+**Justificación.** Es la misma idea que los *marketplaces* de las PaaS (plantillas aprobadas por el
+operador), llevada al mínimo. Se excluyen bases de datos (no hay volúmenes hasta la Fase 6) y cualquier
+imagen que necesite secretos, comandos o montajes.
+
+**Consecuencias.** Añadir un servicio exige una revisión de código (intencionado). Poco catálogo al
+principio.
+
+## ADR-027 · Imágenes identificadas por digest SHA-256 del índice
+
+**Problema.** Una etiqueta (`1.29-alpine`, `latest`) puede apuntar a contenidos distintos con el
+tiempo; lo desplegado no sería reproducible ni verificable.
+
+**Alternativas.** Etiqueta; etiqueta exacta de versión; **digest**; firma de imágenes (cosign).
+
+**Decisión.** La referencia es `repositorio@sha256:<digest del índice multiarquitectura>`. El agente
+descarga por digest (Docker verifica el contenido) y, antes de crear un contenedor, comprueba que la
+imagen local tiene ese digest en `RepoDigests`; si no, se niega. El control plane comprueba al empezar
+cada despliegue que el agente tiene el mismo catálogo (mismos digest). Los digest se obtuvieron con
+`docker manifest inspect` y `docker pull` (2026-11-15). La versión se guarda solo como información.
+
+**Consecuencias.** Actualizar una imagen = cambiar el digest en el catálogo (revisión de código). La
+firma de imágenes queda fuera del alcance.
+
+## ADR-028 · Despliegues como revisiones numeradas e inmutables
+
+**Decisión.** Cada despliegue crea una fila en `deployments` (revisión N de la aplicación, con un
+`operation_id` UUID y un `request_id` del cliente para deduplicar) y copia la configuración completa
+de cada servicio en `deployment_services` (con la imagen y su digest). Un *trigger* de SQLite impide
+modificar esas filas. El historial conserva todas las revisiones, incluidas las fallidas.
+
+**Estados del despliegue.** `pending` (creada), `preparing`, `deploying`, `healthy` (activa y
+funcionando), `stopped` (activa, detenida por el administrador), `superseded` (sustituida por otra),
+`discarded` (creada y nunca desplegada), `failed` (falló sin versión anterior), `rolling_back`,
+`rolled_back` (falló y se recuperó la anterior), `rollback_failed` y `interrupted` (requieren
+intervención).
+
+**Tres estados distintos.** (1) Estado lógico de la aplicación (`draft`, `running`, `stopped`,
+`attention`): qué debería pasar. (2) Estado del despliegue: ciclo de vida de cada revisión. (3) Estado
+real de los contenedores: se pregunta siempre al agente, nunca se deduce de SQLite.
+
+**Consecuencias.** Volver a una revisión antigua a mano queda para la Fase 4 (RF-16); el rollback
+automático ya existe (ADR-033).
+
+## ADR-029 · Protocolo y operaciones permitidas del agente
+
+**Problema.** El control plane necesita orquestar despliegues sin tener acceso a Docker, y el agente
+no debe convertirse en un intermediario genérico de la API de Docker.
+
+**Alternativas.** (a) Endpoint genérico que reenvía llamadas al SDK; (b) una sola operación «despliega
+este plan» en el agente; (c) **operaciones pequeñas y cerradas** orquestadas por el control plane.
+
+**Decisión.** (c). Rutas fijas (`common/agent_protocol.py`): consultar catálogo, asegurar imagen,
+asegurar redes, listar, crear, arrancar, detener y eliminar contenedores, sonda de salud, limpiar los
+contenedores de una operación y retirar una aplicación. Modelos Pydantic estrictos (campos
+desconocidos → 422). El agente: valida contra el catálogo, construye él la configuración de Docker
+(ADR-002), comprueba la propiedad de cada recurso por etiquetas (`managed`, `instance`, `app`, `role`)
+y no ofrece `exec`, `build`, montajes, dispositivos, capacidades ni modo de red. La creación es
+idempotente: el nombre del contenedor es determinista y una petición repetida con la misma operación
+devuelve el existente.
+
+**Justificación frente a (b).** La orquestación (estados, rollback, auditoría) queda en el control
+plane, que tiene la base de datos; el agente se mantiene pequeño y verificable.
+
+**Consecuencias.** Más llamadas HTTP por despliegue; cada una tiene su plazo (`TIMEOUTS`).
+
+## ADR-030 · Comprobación de salud mediante sonda efímera en la red interna
+
+**Problema.** Que Docker cree un contenedor no significa que el servicio funcione. Algunas imágenes
+(como `whoami`) no tienen herramientas para un `HEALTHCHECK` de Docker, y no se deben ejecutar comandos
+dentro de los contenedores de usuario.
+
+**Alternativas.** (a) `HEALTHCHECK` de Docker definido en el catálogo (no sirve para imágenes sin
+shell); (b) conectar el agente a la red de cada aplicación (rompe su aislamiento: las aplicaciones
+podrían alcanzar la API del agente); (c) **sonda efímera**: el agente crea un contenedor de vida corta
+en la red interna de la aplicación que hace `GET http://<servicio>:<puerto><ruta>`.
+
+**Decisión.** (c). La URL la construye el agente a partir de las etiquetas del contenedor y de la
+entrada del catálogo (nunca de la petición). La sonda usa la misma imagen NGINX fijada por digest
+(contiene `wget`), sin root, solo lectura, sin capacidades, con límites, y se elimina siempre. Un
+servicio está sano si está en ejecución, no se ha detenido y la sonda obtiene una respuesta correcta
+dentro del plazo de su entrada (45 s por defecto, reintentos cada 2 s).
+
+**Consecuencias.** Cada sonda cuesta crear un contenedor (~1 s). Solo comprueba HTTP.
+
+## ADR-031 · Dos redes por aplicación: interna y de publicación sin NAT de salida
+
+**Hallazgo (verificado).** Docker **no publica puertos** de contenedores conectados solo a una red
+`internal`, y el modo de pasarela `isolated` solo existe para redes `internal`.
+
+**Problema.** Aislar las aplicaciones entre sí y de Internet, y aun así poder acceder a algunos
+servicios desde el navegador.
+
+**Alternativas.** (a) Una red `internal` (no se puede publicar); (b) una red normal (salida a Internet
+por NAT); (c) **red interna + red de publicación con `enable_ip_masquerade=false`**.
+
+**Decisión.** (c). `minipaas-<instancia>-<app>`: `internal`, todos los servicios, alias = nombre del
+servicio (comunicación interna por nombre). `minipaas-<instancia>-<app>-edge`: *bridge* sin NAT de
+salida, solo los servicios que publican un puerto. Verificado: el puerto publicado responde desde el
+host; ningún contenedor sale a Internet; otra aplicación no alcanza los servicios ni por nombre ni por
+IP.
+
+**Riesgo residual.** Los servicios **publicados** pueden abrir conexiones hacia procesos del host que
+escuchen en todas las interfaces (verificado con un puerto TCP del host; los puertos publicados por
+otros contenedores no son alcanzables). Es el comportamiento normal de un *bridge* de Docker. Se
+revisará con reglas de cortafuegos en el servidor (Fases 11 y 13).
+
+## ADR-032 · Asignación de puertos de acceso en el rango 20000–20999
+
+**Decisión.** Solo los servicios cuya entrada lo permite pueden publicarse, y solo en el rango
+reservado. El usuario puede indicar un puerto o dejar que el control plane asigne el menor libre. Un
+puerto está ocupado si lo tiene otro servicio configurado (`UNIQUE`) o un servicio de la revisión
+activa de otra aplicación. La dirección de enlace la fija el agente
+(`MINIPAAS_PUBLISH_ADDRESS`, por defecto `127.0.0.1`); el usuario no la elige. Si otro proceso del
+host ocupa el puerto, Docker falla al arrancar y el despliegue se recupera (ADR-033).
+
+## ADR-033 · Estrategia `recreate` con rollback automático a contenedores conservados
+
+**Contexto.** ADR-011: con puertos fijos, la versión nueva y la anterior no pueden escuchar a la vez.
+
+**Decisión.** Se detienen (sin borrarlos) los contenedores de la revisión activa, se crean y arrancan
+los nuevos y se verifica su salud (ADR-030). Solo tras confirmar el éxito se borran los anteriores. Si
+algo falla (descarga, creación, arranque, salud, comunicación con el agente): se eliminan solo los
+contenedores de la operación nueva (por su etiqueta `operation`), se vuelven a arrancar los anteriores
+y se verifica su salud. Resultado: `rolled_back` si se recupera; `rollback_failed` y aplicación
+«Requiere intervención» si no; `failed` si no había versión anterior (y se retiran las redes). Un
+error de red o un *timeout* con el agente **no** se interpreta como «Docker no hizo nada»: la limpieza
+por operación cubre los contenedores que sí llegaran a crearse.
+
+**Limitación.** El rollback recupera la versión de la aplicación, no datos (ADR-011); en esta fase no
+hay servicios con estado en el catálogo.
+
+## ADR-034 · Exclusión mutua y recuperación de operaciones interrumpidas
+
+**Exclusión mutua.** Un índice único parcial de SQLite (`one_operation_per_app`) impide que una
+aplicación tenga dos despliegues en `preparing`, `deploying` o `rolling_back`: la segunda petición
+recibe 409 aunque llegue a la vez. Además, un candado por aplicación en el proceso serializa
+despliegue, detener, arrancar, recuperar y borrar.
+
+**Reinicio del control plane.** Al arrancar, las revisiones que quedaron en curso pasan a
+`interrupted` y su aplicación a «Requiere intervención». Después se intenta **recuperar**:
+se piden al agente los contenedores reales; se borran solo los de operaciones **conocidas** (revisiones
+de esa aplicación en estados finales no activos); los de operaciones **desconocidas** no se tocan y se
+informa de ellos; la revisión activa se vuelve a poner en marcha (si debía estar funcionando) o se deja
+detenida. Si el agente no responde, la aplicación queda en «Requiere intervención» hasta que el
+administrador pulse «Recuperar». Ninguna operación interrumpida se reanuda automáticamente: se marca
+y se recupera el último estado bueno.
+
+**Alternativas.** Reanudar el despliegue en el punto exacto (requiere registrar y hacer idempotente
+cada paso; más complejo); cola externa persistente (servicio adicional).
+
+## ADR-035 · Instancias de MiniPaaS sobre el mismo Docker
+
+**Problema.** El entorno de desarrollo, las pruebas de integración y el E2E comparten el mismo Docker;
+ninguno debe tocar los recursos de otro.
+
+**Decisión.** Cada agente tiene una instancia (`MINIPAAS_INSTANCE`: `dev`, `e2e`, `itest`…) que
+forma parte de los nombres (`minipaas-<instancia>-…`) y de la etiqueta `minipaas.instance`. El agente
+solo ve y modifica recursos de su instancia.

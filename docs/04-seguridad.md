@@ -40,6 +40,16 @@
 | A10 | **Implementado y verificado** (auditoría) | Los metadatos de auditoría rechazan claves sensibles; los fallos de login no guardan el usuario escrito; las modificaciones guardan nombres de campo, no valores. Un test recorre todos los eventos y comprueba que no contienen contraseña, cookie ni token CSRF |
 | A13 | Implementado en desarrollo | Panel solo en `127.0.0.1`; `MINIPAAS_COOKIE_SECURE=true` disponible para HTTPS. La exposición real se decidirá en la Fase 13 |
 
+### Estado de las mitigaciones tras la Fase 3
+
+| # | Estado | Cómo se ha implementado y verificado |
+|---|---|---|
+| A1 | **Implementado y verificado** | Catálogo cerrado (ADR-026); el agente construye la configuración y fuerza usuario no root, raíz de solo lectura, `cap_drop ALL`, `no-new-privileges`, `privileged=false`, sin montajes ni dispositivos (ADR-002/029). Comprobado con `docker inspect` en los tests de integración y en el E2E |
+| A3 | **Implementado y verificado** | El agente solo actúa sobre recursos con `minipaas.managed=true` y su `minipaas.instance` (ADR-035); un contenedor ajeno no se puede parar ni borrar (test de integración); el E2E comprueba que los contenedores ajenos no cambian |
+| A9 | Parcial | Límites de memoria (sin swap), CPU y procesos en cada contenedor, dentro de los rangos del catálogo. Falta la cuota global (Fase 9) |
+| A11 | **Implementado y verificado** | Solo imágenes del catálogo, por digest; el agente comprueba `RepoDigests` antes de crear; no se aceptan imágenes, comandos ni argumentos del usuario |
+| Aislamiento de red | **Implementado y verificado** | Red interna por aplicación sin salida a Internet; otra aplicación no alcanza sus servicios ni por nombre ni por IP; las aplicaciones no ven el socket de Docker (E2E e integración) |
+
 ## 4.3 Riesgo residual reconocido
 
 - **El agente sigue teniendo el socket de Docker.** Si se compromete el propio agente, se compromete
@@ -60,6 +70,18 @@
   contraseña y los tokens CSRF de las sesiones (los identificadores de sesión, solo como SHA-256).
   Está en un volumen accesible únicamente desde el contenedor del control plane y por root en el host;
   no se cifra en reposo.
+- **Red de publicación y procesos del host (Fase 3).** Los servicios **publicados** se conectan a una
+  red sin NAT de salida (no salen a Internet), pero pueden abrir conexiones a procesos del host que
+  escuchen en todas las interfaces (verificado con un puerto TCP del host; los puertos publicados por
+  otros contenedores no son alcanzables). Es el comportamiento normal de un *bridge* de Docker. Los
+  servicios no publicados no pueden. Mitigación prevista: reglas de cortafuegos en el servidor
+  (Fases 11 y 13). ADR-031.
+- **Imágenes de terceros (Fase 3).** El digest garantiza que la imagen no cambia, no que sea segura:
+  las vulnerabilidades de NGINX, Alpine o whoami en esa versión permanecen hasta que se actualice el
+  catálogo. No hay escaneo de vulnerabilidades ni verificación de firmas.
+- **Sin políticas de reinicio (Fase 3).** Los contenedores de aplicación no se reinician solos si
+  fallan o si se reinicia el servidor (`restart: no`); el estado real lo mostrará como detenido.
+  Previsto en la Fase 9.
 - **Los volúmenes locales de Docker no tienen cuota de tamaño.** Una aplicación podría llenar el
   disco. Se mostrará el uso por volumen y se alertará; la cuota estricta queda fuera del alcance.
 
