@@ -7,9 +7,10 @@ Trabajo de la asignatura *Gestión de Sistemas de Archivos y Servicios Distribui
 Título provisional: *«Diseño e implementación de una plataforma PaaS ligera para el despliegue y
 gestión de aplicaciones distribuidas»*.
 
-> **Estado actual: Fase 0 (análisis y arquitectura) cerrada y aprobada el 2026-11-15.** Todavía no
-> hay código: el repositorio contiene la documentación de requisitos, arquitectura y planificación.
-> Nada de lo que se describe a continuación está implementado aún.
+> **Estado actual: Fase 1 (estructura y entorno aislado) terminada, pendiente de aprobación.**
+> Existen el control plane y el agente en versión mínima: se comunican de forma autenticada y el
+> panel muestra el estado del sistema. **Todavía no se pueden desplegar aplicaciones**; las
+> capacidades descritas abajo son objetivos de las fases siguientes.
 
 ## ¿Qué es?
 
@@ -39,10 +40,19 @@ HTML/CSS/JavaScript · Chart.js. Justificación en [docs/decisiones.md](docs/dec
 
 Índice completo en [docs/README.md](docs/README.md).
 
-## Requisitos e instalación
+## Puesta en marcha (desarrollo local)
 
-Se documentarán en la Fase 1 (entorno de desarrollo local) y en la Fase 13 (instalación en el
-servidor). Requisito previsto: Linux con Docker Engine y Docker Compose.
+Requisitos: Linux, Docker Engine con Compose y [uv](https://docs.astral.sh/uv/).
+
+```bash
+uv sync && uv run pytest -m "not integration"        # tests
+bash scripts/prepare_dev_env.sh                      # token y GID de Docker (una vez)
+docker compose --env-file deploy/.env -f deploy/compose.dev.yaml up -d --build --wait
+```
+
+Panel: <http://127.0.0.1:8000>. Detalles y verificación del aislamiento en
+[docs/guia-desarrollo.md](docs/guia-desarrollo.md). La instalación en el servidor se documentará en
+la Fase 13.
 
 ## Seguridad
 

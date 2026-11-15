@@ -1,7 +1,10 @@
 # 8. Estructura del proyecto
 
-> Estado del documento: **aprobado por el equipo (2026-11-15)**. A día de hoy solo existen `docs/`, `README.md`,
-> `CHANGELOG.md` y `.gitignore`. El resto se creará a partir de la Fase 1.
+> Estado del documento: **aprobado (2026-11-15)**. Tras la Fase 1 existen: `pyproject.toml`,
+> `uv.lock`, `src/minipaas/{common,controlplane,agent}` (versión mínima), `tests/{unit,api,integration}`,
+> `deploy/` (Dockerfiles, `compose.dev.yaml`, `.env.example`), `scripts/` (preparación y
+> verificación del entorno) y `.github/workflows/ci.yml`. Los elementos marcados con una fase
+> posterior todavía no existen.
 
 ```text
 minipaas/                         (raíz del repositorio)
@@ -12,8 +15,9 @@ minipaas/                         (raíz del repositorio)
 ├── src/
 │   └── minipaas/
 │       ├── common/               Código compartido por control plane y agente   [Fase 1–3]
-│       │   ├── service_request.py Esquema ServiceRequest (contrato control plane ↔ agente)
-│       │   └── naming.py         Reglas de nombres y etiquetas (minipaas-*, minipaas.managed)
+│       │   ├── service_request.py Esquema ServiceRequest (contrato control plane ↔ agente) [Fase 3]
+│       │   ├── naming.py         Prefijo y etiquetas (minipaas-*, minipaas.managed)   [Fase 1 ✔]
+│       │   └── secrets.py        Lectura y validación del token compartido            [Fase 1 ✔]
 │       ├── controlplane/         Proceso sin privilegios                        [Fase 1–2]
 │       │   ├── main.py           Creación de la app FastAPI y arranque
 │       │   ├── config.py         Configuración desde variables de entorno
@@ -33,7 +37,8 @@ minipaas/                         (raíz del repositorio)
 ├── deploy/
 │   ├── Dockerfile.controlplane                                                   [Fase 1]
 │   ├── Dockerfile.agent
-│   ├── compose.dev.yaml          Entorno local de desarrollo
+│   ├── compose.dev.yaml          Entorno local de desarrollo                     [Fase 1 ✔]
+│   ├── .env.example              Ejemplo de deploy/.env (DOCKER_GID)             [Fase 1 ✔]
 │   └── compose.yaml              Despliegue en el servidor                       [Fase 13]
 ├── tests/
 │   ├── unit/                     Sin Docker
@@ -55,7 +60,8 @@ minipaas/                         (raíz del repositorio)
     ├── registro-pruebas.md       Evidencias de pruebas por fase
     ├── bibliografia.md           Fuentes y licencias de terceros
     ├── api.md                    Documentación de la API                         [Fase 2]
-    ├── guia-instalacion.md                                                       [Fase 1 / 13]
+    ├── guia-desarrollo.md        Entorno local de desarrollo                     [Fase 1 ✔]
+    ├── guia-instalacion.md       Instalación en el servidor                      [Fase 13]
     ├── guia-uso.md                                                               [Fase 10]
     └── informes/
         └── fase-00.md            Informe de cierre para Gemini (uno por fase)

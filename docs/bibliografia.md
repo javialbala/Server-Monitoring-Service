@@ -45,13 +45,24 @@
 
 | Recurso | Uso | Licencia | Fase |
 |---|---|---|---|
-| — | Todavía no se ha incorporado código de terceros | — | — |
+| FastAPI 0.163.1 | Framework web (control plane y agente) | MIT | 1 |
+| Starlette 1.10.0 | Base de FastAPI (dependencia indirecta) | BSD-3-Clause | 1 |
+| Uvicorn 0.54.0 | Servidor ASGI | BSD-3-Clause | 1 |
+| HTTPX 0.28.1 | Cliente HTTP del control plane hacia el agente | BSD-3-Clause | 1 |
+| Docker SDK for Python 7.2.0 | Acceso a Docker desde el agente | Apache-2.0 | 1 |
+| pytest 9.2.0 / pytest-cov 7.1.0 | Tests y cobertura (solo desarrollo) | MIT | 1 |
+| Ruff 0.17.5 | Estilo y análisis estático (solo desarrollo) | MIT | 1 |
+| Imagen `python:3.12-slim` | Base de las imágenes Docker | Licencia PSF + paquetes Debian | 1 |
+
+No se ha copiado ni adaptado código de terceros: solo se usan como dependencias. Versiones exactas
+en `uv.lock`. Licencias comprobadas en los metadatos de los paquetes instalados
+(`importlib.metadata`, 2026-11-15).
 
 Cuando se incorpore una dependencia o se adapte código, se añadirá aquí con su licencia.
 
 ## Uso de herramientas de IA
 
-El análisis, el diseño y la documentación de la Fase 0 se han elaborado con la ayuda de un asistente
+El análisis, el diseño, el código y la documentación de las Fases 0 y 1 se han elaborado con la ayuda de un asistente
 de IA (Claude, Anthropic) bajo la dirección del equipo. Todo el contenido debe ser revisado y
 comprendido por el equipo, y las afirmaciones factuales se contrastan con la documentación oficial
 citada.

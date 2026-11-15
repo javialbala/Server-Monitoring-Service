@@ -13,13 +13,14 @@
 | [decisiones.md](decisiones.md) | Registro de decisiones técnicas (ADR) | Vivo |
 | [registro-pruebas.md](registro-pruebas.md) | Evidencias de las pruebas ejecutadas | Vivo |
 | [bibliografia.md](bibliografia.md) | Fuentes, licencias de terceros, uso de IA | Vivo |
+| [guia-desarrollo.md](guia-desarrollo.md) | Entorno local: tests, Docker Compose, verificación del aislamiento | Implementado (Fase 1) |
 | [informes/](informes/) | Informes de cierre de fase para Gemini | Uno por fase |
 
 Entregable de la asignatura conservado sin modificar en la raíz del repositorio:
 [`formato_preguntas.md`](../formato_preguntas.md) (plantilla del cuestionario GIFT; se completará en
 un archivo aparte en la Fase 13).
 
-Documentos previstos para fases posteriores: `api.md` (Fase 2), `guia-instalacion.md` (Fases 1 y
+Documentos previstos para fases posteriores: `api.md` (Fase 2), `guia-instalacion.md` (Fase
 13), `guia-uso.md` (Fase 10).
 
 ## Convenciones

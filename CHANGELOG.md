@@ -3,6 +3,20 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Las versiones se
 corresponden con las fases del proyecto.
 
+## [Fase 1] — 2026-11-15 (pendiente de aprobación)
+
+### Añadido
+
+- Paquete `minipaas` (`src/`) con `common`, `controlplane` y `agent` en versión mínima.
+- Agente: `GET /health` autenticado con token; comprobación de Docker; sin documentación OpenAPI.
+- Control plane: `GET /api/health`, cabeceras de seguridad y panel «Estado del sistema».
+- Token compartido como *secret* de archivo (ADR-014).
+- Dockerfiles con usuarios sin privilegios y `deploy/compose.dev.yaml` con red interna, socket solo
+  en el agente, `read_only`, `cap_drop: ALL` y `no-new-privileges`.
+- Scripts `prepare_dev_env.sh` y `verify_dev_env.sh`.
+- 32 tests unitarios y de API, 1 de integración; CI con GitHub Actions.
+- `docs/guia-desarrollo.md`; ADR-013 (uv), ADR-014 (token), ADR-015 (Python 3.12).
+
 ## [Fase 0] — 2026-11-15 (aprobada)
 
 ### Cambiado (tras la revisión del equipo)

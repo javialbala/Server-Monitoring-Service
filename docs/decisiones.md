@@ -23,6 +23,9 @@ Estados posibles:
 | 010 | Autenticación con un único administrador y sesiones en servidor | **Aceptada con matices** (2026-11-15) |
 | 011 | Despliegue *recreate* con restauración; *rollback* de aplicación, no de datos | Aceptada (matizada el 2026-11-15) |
 | 012 | Ejecución en segundo plano con un *worker* `asyncio` interno | Aceptada |
+| 013 | `uv` para el entorno de desarrollo; `pip` en las imágenes | Aceptada (Fase 1) |
+| 014 | Token compartido entregado como *secret* de archivo | Aceptada (Fase 1) |
+| 015 | Python 3.12 en imágenes y CI | Aceptada (Fase 1) |
 
 ### Historial de aprobaciones
 
@@ -248,3 +251,49 @@ por aplicación. El estado de cada despliegue se persiste en SQLite, de modo que
 necesita sobrevivir a reinicios.
 
 **Motivo.** Sin servicios adicionales; suficiente para un solo servidor; fácil de explicar.
+
+## ADR-013 · `uv` para el entorno de desarrollo; `pip` en las imágenes
+
+**Contexto.** El sistema no tiene `pip` global y hace falta un entorno reproducible para el equipo y
+el CI.
+
+**Alternativas.** `venv` + `pip` + `requirements.txt`; Poetry; **uv**.
+
+**Decisión.** `uv` para crear el entorno virtual, resolver dependencias y fijarlas en `uv.lock`
+(versionado). Las herramientas de desarrollo (`pytest`, `pytest-cov`, `ruff`) van en un grupo `dev`
+de `[dependency-groups]`, que no se instala en las imágenes. Las imágenes Docker usan `pip install`
+del propio paquete para no añadir herramientas a la imagen.
+
+**Consecuencias.** Desarrollo y CI reproducibles con `uv sync --frozen`. Las imágenes **no** usan
+todavía el archivo de bloqueo: dos construcciones en fechas distintas pueden resolver versiones
+diferentes. Se resolverá (exportando el bloqueo o fijando versiones) antes del despliegue final
+(Fase 11/13).
+
+## ADR-014 · Token compartido entregado como *secret* de archivo
+
+**Contexto.** Control plane y agente comparten un token. Debe llegar a ambos procesos sin quedar
+expuesto.
+
+**Alternativas.** Variable de entorno; *secret* de Docker Compose (archivo montado en
+`/run/secrets/`).
+
+**Decisión.** *Secret* de Compose. Las variables de entorno son visibles con `docker inspect` y se
+heredan por los procesos hijos; un archivo montado no. Los procesos leen la ruta de
+`MINIPAAS_AGENT_TOKEN_FILE`, exigen un mínimo de 32 caracteres y **no arrancan** si falta. La
+comparación usa `hmac.compare_digest` (tiempo constante) y responde igual si el token falta o es
+incorrecto.
+
+**Matiz de desarrollo.** Sin Swarm, Compose monta el *secret* como un *bind mount* del archivo del
+host, con su propietario y permisos. Con permisos `600` los usuarios sin privilegios de los
+contenedores (UID 10001 y 10002) no pueden leerlo (verificado: `Permission denied`). En desarrollo el
+archivo tiene permisos `644` dentro de un directorio `700`, de modo que en el host solo el
+desarrollador llega a él. Para producción (Fase 13) se revisará (p. ej. propietario por grupo
+dedicado).
+
+## ADR-015 · Python 3.12 en imágenes y CI
+
+**Contexto.** El equipo de desarrollo tiene Python 3.14; el servidor ejecutará las imágenes.
+
+**Decisión.** `python:3.12-slim` en las imágenes, Python 3.12 en el CI y en el `.venv` local
+(`requires-python >= 3.12`). Es una versión estable, con soporte de seguridad y con *wheels* para
+todas las dependencias. Lo que se prueba es lo que se ejecuta.
