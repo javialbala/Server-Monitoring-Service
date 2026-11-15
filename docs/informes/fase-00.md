@@ -266,13 +266,43 @@ relación y secuencia de despliegue. `docs/06-roadmap.md`: dependencias entre fa
 
 ## F. Git
 
-| Campo | Valor |
-|---|---|
-| Rama inicial | `main`: commit `7e9ef18` — `chore: inicializa el repositorio con .gitignore` (necesario porque el repositorio no tenía ningún commit) |
-| Rama de la fase | `fase-00-analisis` |
-| Commits de la fase | `docs: documentación inicial de la Fase 0` (identificador en `git log`; se indica en la presentación de resultados) |
-| Push | Ver presentación de resultados de la fase (se informa del resultado real) |
-| Fusión en `main` | **Pendiente de aprobación** del equipo |
+### Ramas
+
+| Rama | Contenido | Estado |
+|---|---|---|
+| `main` | Solo el commit inicial `7e9ef18` (necesario porque el repositorio no tenía ningún commit y hacía falta una base para la rama de la fase) | Local |
+| `fase-00-analisis` | Todos los commits de la Fase 0 | Local. Fusión en `main` tras la aprobación del equipo y cuando el *push* sea posible |
+
+### Commits (identificadores reales)
+
+| Commit | Rama | Mensaje | Contenido |
+|---|---|---|---|
+| `7e9ef18` | `main` | `chore: inicializa el repositorio con .gitignore` | `.gitignore` |
+| `6c830fc` | `fase-00-analisis` | `docs: documentación inicial de la Fase 0` | `README.md`, `CHANGELOG.md` y los 13 documentos de `docs/` (1550 líneas añadidas) |
+| `7275902` | `fase-00-analisis` | `docs: conserva sin modificar la plantilla del cuestionario GIFT` | `formato_preguntas.md` sin cambios (SHA-256 verificado) |
+| `9f81eed` | `fase-00-analisis` | `docs: incorpora las aprobaciones y matices de la revisión de la Fase 0` | 13 archivos: ADR, requisitos, arquitectura, seguridad, pruebas, roadmap, informe, registro |
+| *(commit siguiente)* | `fase-00-analisis` | `docs: registra en el informe de la Fase 0 los commits y el resultado del push` | Este apartado F. Un commit no puede contener su propio identificador; se consulta con `git log` |
+
+### Push: **pendiente (fallido, no simulado)**
+
+| Intento | Comando | Resultado real |
+|---|---|---|
+| 1 (cierre inicial) | `git push -u origin main`; `git push -u origin fase-00-analisis` | `fatal: could not read Username for 'https://github.com': terminal prompts disabled` |
+| 2 (revisión del equipo) | `git push -u origin main` | Mismo error |
+
+Causa: el remoto usa HTTPS y en el entorno no hay credenciales configuradas ni la CLI `gh`. Existe
+una clave SSH en el equipo, pero la comprobación de autenticación con GitHub por SSH fue denegada
+por los permisos del entorno de ejecución, así que no se ha cambiado la configuración del remoto.
+
+Para completar el *push*, el equipo debe autenticarse (por ejemplo, `gh auth login`, un *token* de
+acceso personal o autorizar el uso del remoto SSH) y ejecutar:
+
+```bash
+git push -u origin main
+git push -u origin fase-00-analisis
+```
+
+El remoto `origin` (`github.com/javialbala/server-monitoring-service`) sigue **vacío**.
 
 ---
 
