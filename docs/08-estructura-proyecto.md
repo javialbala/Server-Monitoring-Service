@@ -1,0 +1,77 @@
+# 8. Estructura del proyecto
+
+> Estado del documento: **propuesta de la Fase 0**. A día de hoy solo existen `docs/`, `README.md`,
+> `CHANGELOG.md` y `.gitignore`. El resto se creará a partir de la Fase 1.
+
+```text
+minipaas/                         (raíz del repositorio)
+├── README.md                     Presentación, objetivos, puesta en marcha
+├── CHANGELOG.md                  Registro de cambios por fase
+├── LICENSE                       (pendiente de decisión)
+├── pyproject.toml                Dependencias, configuración de ruff y pytest   [Fase 1]
+├── src/
+│   └── minipaas/
+│       ├── common/               Código compartido por control plane y agente   [Fase 1–3]
+│       │   ├── runtime_spec.py   Esquema RuntimeSpec (contrato control plane ↔ agente)
+│       │   └── naming.py         Reglas de nombres y etiquetas (minipaas-*, minipaas.managed)
+│       ├── controlplane/         Proceso sin privilegios                        [Fase 1–2]
+│       │   ├── main.py           Creación de la app FastAPI y arranque
+│       │   ├── config.py         Configuración desde variables de entorno
+│       │   ├── api/              Rutas REST (auth, apps, deployments, monitoring, templates)
+│       │   ├── services/         Lógica: applications, deployments, monitoring, audit
+│       │   ├── spec/             Validación y traducción: storage, networking, resources
+│       │   ├── db/               Conexión SQLite, esquema, migraciones, repositorios
+│       │   ├── security/         Sesiones, contraseñas, CSRF
+│       │   ├── agent_client.py   Cliente HTTP del agente
+│       │   └── web/              Panel: index.html, css/, js/, vendor/chart.js
+│       └── agent/                Proceso con acceso a Docker                    [Fase 3]
+│           ├── main.py           API mínima del agente
+│           ├── policy.py         Política de seguridad (lista blanca, revalidación)
+│           ├── docker_runtime.py Llamadas al SDK de Docker
+│           └── host_metrics.py   Métricas del host
+├── templates/                    Plantillas de aplicaciones (YAML propio)        [Fase 4]
+├── deploy/
+│   ├── Dockerfile.controlplane                                                   [Fase 1]
+│   ├── Dockerfile.agent
+│   ├── compose.dev.yaml          Entorno local de desarrollo
+│   └── compose.yaml              Despliegue en el servidor                       [Fase 13]
+├── tests/
+│   ├── unit/                     Sin Docker
+│   ├── api/                      Control plane con agente falso
+│   └── integration/              Docker local real (marcador `integration`)
+├── scripts/                      Utilidades (crear usuario admin, medir consumo…)
+├── .github/workflows/ci.yml      ruff + pytest                                   [Fase 1]
+└── docs/
+    ├── README.md                 Índice de la documentación
+    ├── 01-vision-y-alcance.md
+    ├── 02-requisitos.md
+    ├── 03-arquitectura.md
+    ├── 04-seguridad.md
+    ├── 05-estrategia-pruebas.md
+    ├── 06-roadmap.md
+    ├── 07-estado-del-arte.md
+    ├── 08-estructura-proyecto.md
+    ├── decisiones.md             Registro de decisiones técnicas (ADR)
+    ├── registro-pruebas.md       Evidencias de pruebas por fase
+    ├── bibliografia.md           Fuentes y licencias de terceros
+    ├── api.md                    Documentación de la API                         [Fase 2]
+    ├── guia-instalacion.md                                                       [Fase 1 / 13]
+    ├── guia-uso.md                                                               [Fase 10]
+    └── informes/
+        └── fase-00.md            Informe de cierre para Gemini (uno por fase)
+```
+
+## Justificación
+
+- **Un único paquete Python (`minipaas`) con dos puntos de entrada** (control plane y agente),
+  empaquetados en dos imágenes distintas. Así el contrato `RuntimeSpec` se define una sola vez en
+  `common/` y no se duplica, pero cada contenedor solo ejecuta lo suyo.
+- **Disposición `src/`**: evita importar accidentalmente el código sin instalar y es la práctica
+  recomendada por la *Python Packaging User Guide*.
+- **`spec/` separado de `services/`**: la validación es pura (sin E/S), por lo que se prueba con
+  tests unitarios rápidos; la orquestación (con E/S) se prueba con dobles de prueba.
+- **El panel dentro del control plane**: se sirve como ficheros estáticos por FastAPI; no requiere un
+  servidor web ni un proceso de compilación adicional.
+- **Chart.js se incluye en `vendor/`** con su licencia (MIT) en lugar de cargarlo desde un CDN, para
+  que el panel funcione sin Internet y sin peticiones a terceros.
+- **`templates/` fuera del código**: las plantillas son datos; se pueden añadir sin tocar Python.
