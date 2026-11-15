@@ -1,6 +1,6 @@
 # 8. Estructura del proyecto
 
-> Estado del documento: **propuesta de la Fase 0**. A día de hoy solo existen `docs/`, `README.md`,
+> Estado del documento: **aprobado por el equipo (2026-11-15)**. A día de hoy solo existen `docs/`, `README.md`,
 > `CHANGELOG.md` y `.gitignore`. El resto se creará a partir de la Fase 1.
 
 ```text
@@ -12,7 +12,7 @@ minipaas/                         (raíz del repositorio)
 ├── src/
 │   └── minipaas/
 │       ├── common/               Código compartido por control plane y agente   [Fase 1–3]
-│       │   ├── runtime_spec.py   Esquema RuntimeSpec (contrato control plane ↔ agente)
+│       │   ├── service_request.py Esquema ServiceRequest (contrato control plane ↔ agente)
 │       │   └── naming.py         Reglas de nombres y etiquetas (minipaas-*, minipaas.managed)
 │       ├── controlplane/         Proceso sin privilegios                        [Fase 1–2]
 │       │   ├── main.py           Creación de la app FastAPI y arranque
@@ -64,7 +64,7 @@ minipaas/                         (raíz del repositorio)
 ## Justificación
 
 - **Un único paquete Python (`minipaas`) con dos puntos de entrada** (control plane y agente),
-  empaquetados en dos imágenes distintas. Así el contrato `RuntimeSpec` se define una sola vez en
+  empaquetados en dos imágenes distintas. Así el contrato `ServiceRequest` se define una sola vez en
   `common/` y no se duplica, pero cada contenedor solo ejecuta lo suyo.
 - **Disposición `src/`**: evita importar accidentalmente el código sin instalar y es la práctica
   recomendada por la *Python Packaging User Guide*.

@@ -1,12 +1,12 @@
 # 5. Estrategia de pruebas
 
-> Estado del documento: **propuesta de la Fase 0**. Todavía no existe código ni tests.
+> Estado del documento: **aprobado por el equipo (2026-11-15)**. Todavía no existe código ni tests.
 
 ## 5.1 Niveles de prueba
 
 | Nivel | Qué prueba | Herramienta | Necesita Docker | Cuándo se ejecuta |
 |---|---|---|---|---|
-| **Unitarias** | Validación de especificaciones (`spec/*`), política del agente, conversión configuración → `RuntimeSpec`, utilidades | `pytest` | No | Siempre (local y CI) |
+| **Unitarias** | Validación de especificaciones (`spec/*`), política del agente, conversión configuración → `ServiceRequest` y construcción de la configuración Docker en el agente, utilidades | `pytest` | No | Siempre (local y CI) |
 | **API** | Endpoints del control plane: autenticación, CSRF, permisos, códigos de estado, auditoría | `pytest` + `TestClient` de FastAPI, con un **agente falso** en memoria | No | Siempre (local y CI) |
 | **Agente** | Endpoints del agente con un cliente Docker simulado | `pytest` + doble de prueba del SDK | No | Siempre |
 | **Integración** | Flujo real contra Docker: crear, arrancar, redesplegar, *rollback*, volúmenes, redes, límites, recursos ajenos protegidos | `pytest -m integration` | Sí (local) | Manualmente y antes de cerrar cada fase |
@@ -20,8 +20,8 @@
 | Componente | Pruebas clave |
 |---|---|
 | Validación (`spec/`) | Nombres válidos/ inválidos (mayúsculas, `..`, longitud), referencias de imagen, puertos fuera de rango o duplicados, rutas de volumen prohibidas, límites ausentes → valores por defecto. |
-| Política del agente | Rechazo de campos desconocidos; rechazo de operaciones sobre recursos sin `minipaas.managed=true`; aplicación de `no-new-privileges` y límites. |
-| Servicio de despliegues | Despliegue correcto; fallo de imagen inexistente; fallo de arranque → restauración de la revisión anterior; candado por aplicación; recuperación tras reinicio a mitad de despliegue. |
+| Política del agente | Rechazo de campos desconocidos (incluido cualquier intento de pasar parámetros de Docker como `privileged`, `cap_add`, `binds`, `network_mode`); comprobación de que la configuración que construye el agente nunca contiene opciones peligrosas; rechazo de operaciones sobre recursos sin `minipaas.managed=true`; aplicación de `no-new-privileges` y límites. |
+| Servicio de despliegues | Despliegue correcto; fallo de imagen inexistente; fallo de arranque → restauración de la versión anterior de la aplicación; candado por aplicación; recuperación tras reinicio a mitad de despliegue; *rollback* que recupera la imagen y configuración anteriores **sin alterar el contenido de los volúmenes** (se comprueba que un dato escrito por la versión nueva sigue presente, para verificar que el comportamiento documentado es el real). |
 | API | 401 sin sesión, 403 sin token CSRF, 422 con datos inválidos, 404 con recursos inexistentes, secretos nunca devueltos, eventos de auditoría generados. |
 | Monitorización | Formato de métricas; `tail` acotado; comportamiento si el contenedor no existe. |
 | Persistencia | Esquema creado desde cero; migraciones de versión; integridad referencial. |

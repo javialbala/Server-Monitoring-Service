@@ -1,6 +1,6 @@
 # 1. Visión y alcance
 
-> Estado del documento: **propuesta de la Fase 0**, pendiente de aprobación.
+> Estado del documento: **aprobado por el equipo (2026-11-15)** con los matices de `decisiones.md`.
 
 ## 1.1 Problema
 
@@ -44,7 +44,7 @@ consultar el historial y volver a una versión anterior.
 |---|---|
 | Aplicaciones | Crear, listar, consultar, editar, eliminar |
 | Despliegue | Desde imagen de un registro público y desde plantillas propias predefinidas |
-| Ciclo de vida | Iniciar, detener, reiniciar, redesplegar, volver a un despliegue anterior |
+| Ciclo de vida | Iniciar, detener, reiniciar, redesplegar, volver a la **versión de la aplicación** de un despliegue anterior (no a sus datos, ver ADR-011) |
 | Configuración | Variables de entorno (con valores secretos ocultos en la interfaz), puertos |
 | Almacenamiento | Volúmenes persistentes con nombre, que sobreviven a los redespliegues |
 | Redes | Red privada por aplicación; exposición controlada de puertos al exterior |
@@ -62,6 +62,8 @@ consultar el historial y volver a una versión anterior.
 | Multi-nodo, clúster, planificación entre máquinas | Hardware de un solo servidor. Se discute como limitación y trabajo futuro. |
 | Autoescalado horizontal | Sin varios nodos no aporta valor real; se puede discutir conceptualmente. |
 | Multi-inquilino con aislamiento fuerte entre usuarios | Un servidor doméstico tiene uno o pocos administradores. |
+| Varios usuarios y roles (p. ej. solo lectura) | Se empieza con un único administrador (ADR-010). |
+| *Rollback* de datos persistentes (instantáneas de volúmenes) | No hay mecanismo real para ello; el *rollback* recupera la versión de la aplicación, no sus datos (ADR-011). |
 | Kubernetes, OpenStack, Proxmox | Peso excesivo para el hardware y el alcance (ver `decisiones.md`, ADR-001). |
 | Certificados TLS públicos automáticos | Depende de un dominio público; se valorará en la fase de despliegue final. |
 
@@ -76,8 +78,8 @@ código legible y documentación suficiente para defenderla académicamente.
 - **No poner en riesgo el servidor real.** Todo el desarrollo y las pruebas se hacen en local. La
   plataforma solo puede actuar sobre recursos Docker que ella misma ha creado (marcados con la
   etiqueta `minipaas.managed=true`).
-- **Recursos limitados.** Objetivo: los componentes propios de MiniPaaS deben consumir menos de
-  ~250 MB de RAM en reposo.
+- **Recursos limitados.** Objetivo de diseño: los componentes propios de MiniPaaS deberían consumir
+  menos de ~250 MB de RAM en reposo. Es un objetivo, no un resultado, hasta que se mida (RNF-07).
 - **Tecnologías comprensibles.** Cada pieza debe poder explicarse en la defensa.
 - **Proyecto académico de duración limitada.** Se prioriza un núcleo sólido frente a muchas
   funcionalidades a medias.
@@ -86,7 +88,8 @@ código legible y documentación suficiente para defenderla académicamente.
 
 | Rol | Descripción |
 |---|---|
-| Administrador | Persona que gestiona el servidor y despliega aplicaciones. Usuario principal. |
+| Administrador | Persona que gestiona el servidor y despliega aplicaciones. **Único usuario del panel** (ADR-010). |
 | Visitante de una aplicación | Accede a la aplicación desplegada (no al panel). No interactúa con MiniPaaS. |
 
-La existencia de un rol adicional de solo lectura está pendiente de decisión (ver `decisiones.md`).
+Decisión aprobada: se empieza con un único usuario administrador; otros roles quedan fuera del
+alcance inicial (ver `decisiones.md`, ADR-010).

@@ -14,7 +14,7 @@
 | Fase | 0 — Análisis, requisitos, arquitectura y documentación inicial |
 | Fecha | 2026-11-15 |
 | Objetivo | Analizar el punto de partida, definir alcance y requisitos, diseñar la arquitectura, elegir tecnologías, identificar riesgos, definir la estrategia de pruebas, ajustar el roadmap y crear la documentación base. |
-| Estado | **Completada, pendiente de revisión y aprobación del equipo.** Varias decisiones están en estado *Propuesta* (ver apartado G). |
+| Estado | **Completada y aprobada por el equipo (2026-11-15)**, con los matices del apartado B.6. Fase 1 no iniciada: requiere autorización expresa. |
 
 Importante: en esta fase **no se ha implementado código** ni se ha desplegado ningún servicio. Todo
 lo descrito sobre la plataforma es **diseño propuesto**, no funcionalidad implementada.
@@ -32,7 +32,9 @@ lo descrito sobre la plataforma es **diseño propuesto**, no funcionalidad imple
   formato GIFT de Moodle, 4 opciones por pregunta, una correcta (`=`) y tres incorrectas
   (`~%-50%`), categoría `$CATEGORY: $course$/Valor por defecto para Gestion de Archivos y Servicios
   Distribuidos/<Trabajo>-<Apellidos>`. Se ha identificado como **entregable obligatorio** y se ha
-  incorporado a la Fase 13. El archivo no se ha modificado ni versionado (pendiente de decisión).
+  incorporado a la Fase 13. Por indicación del equipo se ha **versionado sin ninguna modificación**
+  en su ubicación original (commit `7275902`), verificando que su SHA-256 es idéntico antes y después
+  (`af7d4826…f694`).
 - No existía código del antiguo *Server Control Center* en el repositorio: el proyecto parte de cero.
 - Entorno local de desarrollo verificado: Python 3.14.8, Docker 29.9.2, Docker Compose 5.6.1; el
   usuario pertenece al grupo `docker`.
@@ -57,8 +59,11 @@ lo descrito sobre la plataforma es **diseño propuesto**, no funcionalidad imple
 | `docs/registro-pruebas.md` | Registro de validaciones ejecutadas |
 | `docs/bibliografia.md` | Fuentes, licencias de terceros y declaración de uso de IA |
 | `docs/informes/fase-00.md` | Este informe |
+| `formato_preguntas.md` | Plantilla del cuestionario GIFT, versionada **sin modificar** |
 
-Archivos modificados: ninguno (repositorio vacío). Archivos eliminados: ninguno.
+Archivos modificados tras la revisión del equipo: todos los documentos de `docs/`, `README.md` y
+`CHANGELOG.md`, para incorporar las aprobaciones y matices (apartado B.6). Archivos eliminados:
+ninguno.
 Dependencias añadidas: ninguna.
 
 ### B.3 Arquitectura propuesta (resumen)
@@ -69,8 +74,11 @@ Dos procesos con privilegios distintos sobre Docker Engine:
    (HTML/CSS/JS), autenticación, validación, gestión de aplicaciones y despliegues, monitorización,
    auditoría, base de datos SQLite.
 2. **Agente runtime** (proceso separado, único con acceso al socket de Docker): API interna mínima
-   con una lista cerrada de operaciones; revalida todo con una política de seguridad estricta; solo
-   actúa sobre recursos etiquetados `minipaas.managed=true`; sin puertos expuestos; sin `exec`.
+   con una lista cerrada de operaciones. **No recibe parámetros de Docker**: recibe una descripción
+   de alto nivel del servicio (`ServiceRequest`: imagen, variables, puertos del rango, volúmenes por
+   nombre lógico, límites, health check) y **construye él mismo** la configuración de Docker con
+   valores seguros fijos. Rechaza campos desconocidos; solo actúa sobre recursos etiquetados
+   `minipaas.managed=true`; sin puertos expuestos; sin `exec`.
 
 Comunicación: HTTP sobre una red Docker interna (`internal: true`) con token compartido.
 
@@ -80,23 +88,24 @@ sobrevive a los redespliegues), **Usuario**, **Evento de auditoría**.
 
 Flujo de despliegue: estrategia *recreate* con restauración automática (parar revisión anterior →
 arrancar la nueva → comprobar salud → si falla, restaurar la anterior), ejecutado en segundo plano
-por un *worker* `asyncio` con un candado por aplicación.
+por un *worker* `asyncio` con un candado por aplicación. El *rollback* (manual o automático)
+recupera la **versión de la aplicación** (imagen y configuración), **no los datos persistentes**.
 
 ### B.4 Decisiones técnicas adoptadas
 
 | ADR | Decisión | Estado |
 |---|---|---|
 | 001 | Docker Engine en un nodo (no Kubernetes, Swarm ni Podman) | Aceptada |
-| 002 | Agente propio con lista blanca como única vía hacia Docker | Propuesta |
+| 002 | Agente propio como única vía hacia Docker; construye la configuración, nunca acepta parámetros Docker | **Aceptada con matices** |
 | 003 | SDK oficial de Docker para Python (no CLI ni Compose generado) | Aceptada |
 | 004 | Python + FastAPI + Pydantic | Aceptada |
 | 005 | SQLite con `sqlite3` estándar y SQL explícito (sin ORM) | Aceptada |
 | 006 | Panel HTML/CSS/JS sin framework ni compilación; Chart.js local | Aceptada |
-| 007 | Aplicaciones multi-servicio con red privada por aplicación | Propuesta |
-| 008 | Acceso por rango de puertos; proxy inverso opcional | Propuesta |
-| 009 | Despliegue desde imágenes y plantillas propias (sin Compose arbitrario ni builds) | Propuesta |
-| 010 | Usuario administrador local, sesiones en servidor, CSRF | Propuesta |
-| 011 | Despliegue *recreate* con restauración automática | Aceptada |
+| 007 | Aplicaciones multi-servicio con red privada por aplicación | **Aceptada** |
+| 008 | Acceso por rango de puertos 20000–20999; proxy inverso opcional | **Aceptada** |
+| 009 | Despliegue desde imágenes y plantillas propias (sin Compose arbitrario ni builds) | **Aceptada** |
+| 010 | Un único usuario administrador, sesiones en servidor, CSRF | **Aceptada con matices** |
+| 011 | Despliegue *recreate* con restauración; *rollback* de aplicación, no de datos | Aceptada (matizada) |
 | 012 | *Worker* `asyncio` interno (sin Celery/Redis) | Aceptada |
 
 ### B.5 Cambios en el roadmap
@@ -107,6 +116,22 @@ por un *worker* `asyncio` con un candado por aplicación.
 3. Aplicaciones multi-servicio en la Fase 7 (antes, un servicio por aplicación).
 4. Cuestionario GIFT añadido a la Fase 13.
 
+Estos cambios del roadmap fueron **aprobados por el equipo** el 2026-11-15.
+
+### B.6 Revisión del equipo: aprobaciones y matices (2026-11-15)
+
+El equipo aprobó la arquitectura general y las ADR 002, 007, 008, 009 y 010, con estos matices,
+ya incorporados a la documentación:
+
+| # | Matiz | Dónde se ha reflejado |
+|---|---|---|
+| 1 | El agente **construye internamente** las configuraciones permitidas y **nunca acepta parámetros de Docker arbitrarios** que permitan elevar privilegios, montar rutas peligrosas o acceder al host. El contrato pasa a llamarse `ServiceRequest` (antes `RuntimeSpec`) para dejar claro que no es una configuración de Docker. | ADR-002; `03-arquitectura.md` §3.6; `04-seguridad.md` (A1); RNF-01; estrategia de pruebas; estructura del proyecto |
+| 2 | El *rollback* distingue entre **recuperar la versión de la aplicación** (sí: imagen y configuración de una revisión anterior) y **recuperar los datos persistentes** (no: los volúmenes se reutilizan tal como están). No se promete *rollback* de datos porque no existe un mecanismo real; la exportación de volúmenes (RF-43, opcional) sería una copia de seguridad manual. | ADR-011; `03-arquitectura.md` §3.3 y §3.5; RF-16, RF-17, RF-43; alcance; nuevo riesgo en `04-seguridad.md`; criterio de la Fase 4; prueba específica en la estrategia de pruebas |
+| 3 | El consumo < 250 MB es un **objetivo de diseño** hasta que pueda medirse. | RNF-07; `01-vision-y-alcance.md` §1.5; Fase 12 del roadmap |
+| 4 | Se empieza con un **único usuario administrador**. | ADR-010; RF-01; `01-vision-y-alcance.md` §1.6 y fuera de alcance |
+| 5 | Se mantiene el **rango de puertos 20000–20999** y el **proxy inverso es opcional**. | ADR-008 |
+
+Además, se ha versionado `formato_preguntas.md` sin modificar (ver B.1).
 ---
 
 ## C. Justificación académica y técnica
@@ -132,7 +157,7 @@ por un *worker* `asyncio` con un candado por aplicación.
 | Control plane | Ofrecer una abstracción de «aplicación» y «despliegue» sobre contenedores, con autenticación y validación. |
 | Agente runtime | Aislar el privilegio de Docker (equivalente a root) del componente expuesto a la red. |
 | Módulos `spec/` (almacenamiento, red, recursos) | Traducir configuración de alto nivel a una especificación de runtime segura y validada. |
-| Revisiones de despliegue inmutables | Historial, trazabilidad y vuelta atrás. |
+| Revisiones de despliegue inmutables | Historial, trazabilidad y vuelta atrás a una versión anterior de la aplicación (no de sus datos). |
 | Etiquetas `minipaas.managed` | Garantizar que la plataforma nunca toca servicios ajenos del servidor. |
 | Sincronizador de estado | Detectar diferencias entre estado deseado y real (reconciliación simplificada). |
 
@@ -151,13 +176,17 @@ por un *worker* `asyncio` con un candado por aplicación.
 
 ### C.4 Ventajas e inconvenientes de la solución
 
-Ventajas: ligera (objetivo < 250 MB de RAM), comprensible, segura por diseño (mínimo privilegio y
-defensa en profundidad), protege los servicios existentes, historial de despliegues con vuelta atrás.
+Ventajas: diseñada para ser ligera (objetivo de diseño < 250 MB de RAM, **todavía sin medir**),
+comprensible, segura por diseño (mínimo privilegio y defensa en profundidad; el agente construye la
+configuración de Docker), protege los servicios existentes, historial de despliegues con vuelta atrás
+a versiones anteriores de la aplicación.
 
 Inconvenientes / limitaciones: un solo nodo (sin alta disponibilidad ni escalado horizontal), breve
 corte de servicio en cada despliegue (*recreate*), el agente sigue siendo un componente crítico, los
 contenedores comparten kernel con el host, los volúmenes locales de Docker no tienen cuota de tamaño,
-URLs con puerto si no se usa proxy inverso.
+URLs con puerto si no se usa proxy inverso, y el *rollback* **no revierte los datos persistentes**
+(una versión anterior podría no ser compatible con datos modificados por la nueva), un solo usuario
+administrador.
 
 ### C.5 Conceptos de GSASD aplicados
 
@@ -188,6 +217,14 @@ No hay código, por lo que no hay pruebas automáticas. Validaciones **ejecutada
 | 0.5 | Secretos | `grep -rniE` con patrones de credenciales y claves privadas | **Sin coincidencias** |
 | 0.6 | Diagramas Mermaid | Revisión manual | Se detectó y corrigió un `;` que rompía el diagrama de secuencia. **Pendiente** comprobar el renderizado en GitHub |
 
+Validaciones adicionales tras la revisión del equipo (2026-11-15):
+
+| # | Validación | Comando | Resultado real |
+|---|---|---|---|
+| 0.7 | Integridad de `formato_preguntas.md` | `sha256sum formato_preguntas.md` antes de versionarlo; `git show HEAD:formato_preguntas.md \| sha256sum`; `git diff --quiet HEAD -- formato_preguntas.md` | Hash idéntico en disco y en Git: `af7d48262e8296a301435dc448af91f58bd84bbef21520ea3a6ef6b12d26f694`; sin diferencias |
+| 0.8 | *Push* al remoto | `git push -u origin main` y `git push -u origin fase-00-analisis` (HTTPS) | **Fallido** en todos los intentos: `fatal: could not read Username for 'https://github.com': terminal prompts disabled`. No hay credenciales HTTPS configuradas ni CLI `gh`. Ver apartado F |
+| 0.9 | Coherencia tras los cambios | Comprobación de enlaces relativos y búsqueda de restos del nombre antiguo `RuntimeSpec` | 15 archivos, 17 enlaces relativos, **0 rotos**; `RuntimeSpec` solo aparece como nombre antiguo; ninguna ADR queda en estado *Propuesta*; búsqueda de secretos **sin coincidencias** |
+
 Errores encontrados y corregidos: los dos enlaces de la validación 0.4 y el `;` del diagrama de
 secuencia (0.6).
 
@@ -204,7 +241,7 @@ No hay código todavía. Módulos **previstos** (estructura completa en `docs/08
 
 | Módulo previsto | Responsabilidad |
 |---|---|
-| `minipaas.common.runtime_spec` | Contrato `RuntimeSpec` entre control plane y agente; sin campos peligrosos |
+| `minipaas.common.service_request` | Contrato `ServiceRequest` entre control plane y agente: descripción de alto nivel, sin ningún parámetro de Docker |
 | `minipaas.common.naming` | Prefijos y etiquetas de los recursos Docker |
 | `minipaas.controlplane.api` | Rutas REST |
 | `minipaas.controlplane.services` | Aplicaciones, despliegues, monitorización, auditoría |
@@ -241,17 +278,17 @@ relación y secuencia de despliegue. `docs/06-roadmap.md`: dependencias entre fa
 
 ## G. Pendientes
 
-### Decisiones que necesitan aprobación
+### Decisiones resueltas en la revisión (2026-11-15)
 
-1. **ADR-002** — agente propio con lista blanca como única vía de acceso a Docker (recomendado).
-2. **ADR-007** — aplicaciones multi-servicio con red privada por aplicación (recomendado).
-3. **ADR-008** — acceso a las aplicaciones por rango de puertos; proxy inverso opcional.
-4. **ADR-009** — solo imágenes y plantillas propias; sin construcción desde código.
-5. **ADR-010** — un único administrador o también usuarios de solo lectura.
-6. Roadmap ajustado (apartado B.5).
-7. Licencia del repositorio y nombre del repositorio (`server-monitoring-service` ya no describe el
-   proyecto; se propone renombrarlo a `minipaas`).
-8. Qué hacer con `formato_preguntas.md` (versionarlo en `docs/entregables/` o mantenerlo fuera).
+ADR-002, 007, 008, 009 y 010 aprobadas con matices; roadmap aprobado; `formato_preguntas.md`
+conservado sin modificar y versionado.
+
+### Cuestiones todavía abiertas (no bloquean la Fase 1)
+
+1. Licencia del repositorio.
+2. Nombre del repositorio (`server-monitoring-service` ya no describe el proyecto; se propone
+   `minipaas`).
+3. Credenciales para hacer *push* a GitHub (apartado F).
 
 ### Información necesaria del servidor (antes de la Fase 13; útil desde la Fase 5)
 
@@ -291,8 +328,18 @@ control plane y agente mínimos comunicándose, CI con GitHub Actions y guía de
 
 ### Decisiones que debe registrar
 
-Las 12 ADR con su estado. Marcar 002, 007, 008, 009 y 010 como **propuestas pendientes de
-aprobación**.
+Las 12 ADR con su estado. 002, 007, 008, 009 y 010 están **aceptadas** desde el 2026-11-15; 002, 010 y
+011 con los matices del apartado B.6. Registrar también el historial de aprobaciones de
+`decisiones.md`.
+
+Puntos que deben quedar explícitos en la memoria:
+
+- El agente **construye** la configuración de Docker; nunca recibe parámetros de Docker
+  (explicarlo como aplicación del mínimo privilegio y de la validación por lista blanca).
+- El *rollback* recupera la **versión de la aplicación**, no los **datos**; explicar por qué
+  (los volúmenes son independientes del ciclo de vida de los contenedores) y qué riesgo implica.
+- El consumo < 250 MB es un **objetivo de diseño**, no un resultado.
+- Un único usuario administrador en esta versión.
 
 ### Diagramas que debe crear o actualizar
 
@@ -314,9 +361,9 @@ aprobación**.
 
 ### Qué NO debe considerar definitivo
 
-- Ninguna funcionalidad está implementada: todo es diseño.
-- Las ADR en estado *Propuesta*.
-- El roadmap ajustado (pendiente de aprobación).
+- Ninguna funcionalidad está implementada: todo es diseño (aprobado, pero no implementado).
+- El objetivo de consumo < 250 MB: no presentarlo como resultado hasta la medición de la Fase 12.
+- Ninguna afirmación de recuperación de datos: no existe *rollback* de datos.
 - Los datos marcados *(verificar)* en el estado del arte (recursos mínimos de OpenShift de nodo único,
   fecha y destino de la desinversión de Stackato por HPE).
 - Los valores numéricos de diseño (rango de puertos 20000–20999, objetivo de 250 MB, intervalos de

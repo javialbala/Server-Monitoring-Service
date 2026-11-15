@@ -1,6 +1,6 @@
 # 6. Roadmap
 
-> Estado del documento: **propuesta de la Fase 0**, pendiente de aprobación.
+> Estado del documento: **aprobado por el equipo (2026-11-15)**.
 
 ## 6.1 Cambios respecto a la planificación inicial
 
@@ -12,6 +12,8 @@
 | **Las aplicaciones multi-servicio se implementan en la Fase 7** (redes), con un solo servicio hasta entonces. | Primero se consolida el ciclo completo con un servicio; la red privada por aplicación es la que habilita varios servicios. |
 | **El cuestionario GIFT** (10 preguntas, ver `formato_preguntas.md`) se incluye en la Fase 13. | Es un entregable de la asignatura detectado en el repositorio. |
 
+Estos cambios fueron **aprobados por el equipo el 2026-11-15**.
+
 ## 6.2 Fases
 
 | Fase | Nombre | Objetivo y entregables principales | Criterio de aceptación |
@@ -20,7 +22,7 @@
 | 1 | Estructura y entorno aislado | Estructura de directorios, `pyproject.toml`, `ruff`, `pytest`, Dockerfiles, `compose.dev.yaml` con control plane y agente «hola mundo», CI básica, guía de desarrollo. | `docker compose up` local arranca ambos procesos; el control plane llama al agente; CI en verde; el control plane no ve el socket. |
 | 2 | Control plane, base de datos y API básica | SQLite + esquema y migraciones, modelo de aplicaciones (sin Docker), autenticación, CSRF, auditoría, esqueleto del panel (login + lista de aplicaciones). | CRUD de aplicaciones por API y panel con sesión; tests de API en verde. |
 | 3 | Agente runtime y ciclo de vida básico | Agente con política y lista blanca; cliente del agente; crear/arrancar/parar/eliminar una aplicación de un servicio desde imagen; sincronización de estado. | Despliegue real de `nginx:alpine` en local; tests de política; contenedor ajeno protegido. |
-| 4 | Despliegues, imágenes y plantillas | Revisiones inmutables, despliegue en segundo plano, restauración automática ante fallo, *rollback*, catálogo de plantillas propias. | Redespliegue y *rollback* verificados con test de integración; plantilla desplegada desde el panel. |
+| 4 | Despliegues, imágenes y plantillas | Revisiones inmutables, despliegue en segundo plano, restauración automática ante fallo, *rollback* de la versión de la aplicación (no de los datos), catálogo de plantillas propias. | Redespliegue y *rollback* verificados con test de integración (incluido que los volúmenes no se alteran); advertencia sobre datos visible en el panel; plantilla desplegada desde el panel. |
 | 5 | Configuración: variables y puertos | Variables de entorno y secretos; publicación de puertos en rango; detección de conflictos. | Secretos nunca devueltos por la API; conflicto de puertos detectado antes de desplegar. |
 | 6 | Almacenamiento persistente | Volúmenes con nombre, persistencia entre despliegues, tamaño ocupado, borrado con confirmación, exportación opcional. | Dato escrito sobrevive a un redespliegue (test). |
 | 7 | Redes y aplicaciones multi-servicio | Red privada por aplicación, varios servicios por aplicación, resolución por nombre, URL de acceso; proxy inverso opcional. | Plantilla web + base de datos funcional; dos aplicaciones no se ven entre sí (test). |
@@ -28,7 +30,7 @@
 | 9 | Recursos y ciclo de vida | Límites obligatorios, cuota global, políticas de reinicio, reconciliación tras reinicio del servidor. | Límite efectivo comprobado (`docker inspect`); estado correcto tras reiniciar Docker. |
 | 10 | Experiencia de usuario | Revisión completa de la interfaz: coherencia, textos, errores, confirmaciones, accesibilidad básica, diseño adaptable. | Lista de comprobación de usabilidad superada; prueba con un usuario sin conocimientos de Docker. |
 | 11 | Endurecimiento y auditoría de seguridad | Revisión del modelo de amenazas, CSP, limitación de intentos, revisión de dependencias, Docker *rootless* (evaluación). | Todas las amenazas del modelo con mitigación verificada o riesgo aceptado documentado. |
-| 12 | Pruebas de integración y evaluación | Batería completa de integración, medición de consumo y tiempos, comparación con requisitos. | Informe de evaluación con resultados reales. |
+| 12 | Pruebas de integración y evaluación | Batería completa de integración, medición de consumo y tiempos, comparación con requisitos (incluida la verificación del objetivo de diseño de < 250 MB, RNF-07). | Informe de evaluación con resultados reales. |
 | 13 | Despliegue final, demostración y documentación | Instalación en el servidor (con autorización), guía de instalación y uso, memoria, presentación, cuestionario GIFT. | Plataforma funcionando en el servidor sin afectar a los servicios existentes; demo preparada. |
 
 ## 6.3 Dependencias entre fases

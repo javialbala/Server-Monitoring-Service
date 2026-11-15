@@ -1,7 +1,7 @@
 # 3. Arquitectura
 
-> Estado del documento: **propuesta de la Fase 0**, pendiente de aprobación. Nada de lo descrito
-> está implementado todavía.
+> Estado del documento: **arquitectura aprobada por el equipo (2026-11-15)**, con los matices
+> recogidos en `decisiones.md`. Nada de lo descrito está implementado todavía.
 
 ## 3.1 Visión general
 
@@ -128,8 +128,10 @@ erDiagram
 Decisiones de modelado:
 
 - **La especificación de un despliegue es inmutable.** Cambiar la configuración crea una revisión
-  nueva. Esto da historial y *rollback* gratis, y es la misma idea que usan Cloud Foundry
-  (*droplets/releases*) y OpenShift/Kubernetes (*ReplicaSets/rollouts*).
+  nueva. Esto da historial y *rollback* **de la versión de la aplicación** con poco código, y es la
+  misma idea que usan Cloud Foundry (*droplets/releases*) y OpenShift/Kubernetes
+  (*ReplicaSets/rollouts*). Los **datos de los volúmenes no forman parte de la revisión** y no se
+  revierten (ver 3.5 y ADR-011).
 - **Los secretos** se guardan en la especificación, pero la API nunca los devuelve en claro (se
   muestran como `••••`). El cifrado en reposo con una clave de la plataforma se evaluará en la Fase 5.
 - **Estado deseado frente a estado real.** La base de datos guarda lo que *debería* estar ocurriendo
@@ -193,6 +195,16 @@ sequenceDiagram
 Los volúmenes nunca se borran en un redespliegue: solo al eliminar la aplicación y si el usuario lo
 confirma expresamente.
 
+### Rollback: versión de la aplicación frente a datos
+
+Un *rollback* (manual o la restauración automática anterior) **recupera la versión de la
+aplicación** —imagen y configuración de una revisión anterior—, pero **no recupera los datos
+persistentes**: los volúmenes se reutilizan en el estado en que estén. Si la versión nueva modificó
+los datos (por ejemplo, migró el esquema de una base de datos), la versión anterior podría no ser
+compatible con ellos. El panel lo advertirá antes de confirmar un *rollback*. MiniPaaS no hace
+instantáneas de volúmenes; la exportación manual de un volumen (RF-43, opcional) sería una copia de
+seguridad, no un *rollback* de datos.
+
 Para ejecutar los despliegues en segundo plano se usará un único *worker* dentro del control plane
 (una cola en memoria procesada por una tarea de `asyncio`), con un candado por aplicación para que
 no haya dos despliegues simultáneos de la misma aplicación. No se necesita Celery/Redis a esta
@@ -209,16 +221,20 @@ compartido generado en la instalación. Operaciones previstas (lista cerrada):
 | `POST /networks/ensure` | Crea la red privada de una aplicación si no existe | Nombre con prefijo y etiquetas |
 | `POST /volumes/ensure`, `DELETE /volumes/{name}` | Crea / borra un volumen con nombre | Prefijo `minipaas-`, etiqueta `managed` |
 | `POST /images/pull` | Descarga una imagen | Formato de referencia válido; registros permitidos (configurable) |
-| `POST /containers` | Crea un contenedor a partir de una `RuntimeSpec` | Ver tabla siguiente |
+| `POST /services` | Crea el contenedor de un servicio a partir de una `ServiceRequest` de alto nivel | El agente construye la configuración (ver abajo) |
 | `POST /containers/{id}/{start,stop,restart}`, `DELETE /containers/{id}` | Ciclo de vida | Etiqueta `managed` |
 | `GET /containers?app=` | Lista contenedores de una aplicación | Filtra por etiqueta |
 | `GET /containers/{id}/logs`, `/stats`, `/inspect` | Lectura de logs, consumo y estado | Etiqueta `managed`; `tail` acotado |
 | `GET /host/metrics` | CPU, memoria y disco del host | Solo lectura |
 
-La `RuntimeSpec` que acepta `POST /containers` **no tiene campos** para las opciones peligrosas: no
-se puede pedir `privileged`, `cap_add`, `network_mode`, `pid`, `ipc`, `devices` ni montajes *bind*,
-porque el esquema simplemente no los contempla (y rechaza campos desconocidos). Además, el agente
-aplica siempre:
+**Principio aprobado: el agente construye la configuración de Docker; nunca la recibe.** La
+`ServiceRequest` que acepta `POST /services` **no es una configuración de Docker**: describe el
+servicio en términos de MiniPaaS (aplicación, servicio, imagen, variables, puertos internos y del
+rango, volúmenes por nombre lógico y ruta interna, límites, health check, política de reinicio). No
+existe ningún campo por el que pasar opciones de Docker (`privileged`, `cap_add`, `network_mode`,
+`pid`, `ipc`, `devices`, montajes *bind*, `security_opt`, `sysctls`…), y cualquier campo desconocido
+provoca el rechazo. Es el agente quien, con valores fijados en su código, traduce esa petición a la
+llamada al SDK de Docker. En concreto, el agente aplica siempre:
 
 - `no-new-privileges`, eliminación de capacidades innecesarias cuando la imagen lo permita;
 - límites de memoria y CPU obligatorios (con valores por defecto);

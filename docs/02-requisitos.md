@@ -1,6 +1,7 @@
 # 2. Requisitos
 
-> Estado del documento: **propuesta de la Fase 0**. Ningún requisito está implementado todavía.
+> Estado del documento: **aprobado por el equipo (2026-11-15)** con los matices de `decisiones.md`.
+> Ningún requisito está implementado todavía.
 >
 > Prioridad (MoSCoW): **M** = imprescindible, **S** = debería, **C** = podría (si hay tiempo).
 > La columna *Fase* indica en qué fase del roadmap se prevé implementarlo.
@@ -11,7 +12,7 @@
 
 | ID | Requisito | Prioridad | Fase |
 |---|---|---|---|
-| RF-01 | El panel y la API exigen iniciar sesión con usuario y contraseña. | M | 2 |
+| RF-01 | El panel y la API exigen iniciar sesión con usuario y contraseña. Existe un único usuario administrador, creado en la instalación (ADR-010). | M | 2 |
 | RF-02 | El usuario puede cerrar sesión; las sesiones caducan tras un tiempo de inactividad. | M | 2 |
 | RF-03 | Las operaciones relevantes (crear, desplegar, detener, eliminar…) quedan registradas en un log de auditoría consultable. | M | 2–3 |
 
@@ -25,8 +26,8 @@
 | RF-13 | Desplegar una aplicación a partir de una imagen de un registro de contenedores. | M | 3–4 |
 | RF-14 | Desplegar una aplicación a partir de una plantilla predefinida (p. ej. web estática, WordPress+MariaDB). | M | 4 |
 | RF-15 | Cada despliegue queda registrado con número de revisión, configuración, fecha y resultado. | M | 4 |
-| RF-16 | Volver a desplegar una revisión anterior (*rollback*). | S | 4 |
-| RF-17 | Si un despliegue nuevo falla al arrancar, la plataforma restaura el anterior automáticamente. | S | 4 |
+| RF-16 | Volver a desplegar la versión de la aplicación (imagen y configuración) de una revisión anterior (*rollback* de aplicación). **No revierte los datos de los volúmenes**; el panel lo advierte antes de confirmar (ADR-011). | S | 4 |
+| RF-17 | Si un despliegue nuevo falla al arrancar, la plataforma restaura automáticamente la versión anterior de la aplicación (con la misma limitación respecto a los datos que RF-16). | S | 4 |
 | RF-18 | Iniciar, detener y reiniciar una aplicación completa. | M | 3 |
 | RF-19 | Eliminar una aplicación, preguntando si se conservan o borran sus volúmenes. | M | 3, 6 |
 | RF-20 | Una aplicación puede estar formada por varios servicios que se comunican entre sí por nombre. | S | 7 |
@@ -47,7 +48,7 @@
 | RF-40 | Asociar volúmenes persistentes con nombre a una ruta del contenedor. | M | 6 |
 | RF-41 | Los volúmenes sobreviven a redespliegues, reinicios y actualizaciones de imagen. | M | 6 |
 | RF-42 | Listar los volúmenes de una aplicación con su tamaño ocupado. | S | 6 |
-| RF-43 | Exportar una copia (archivo `.tar.gz`) de un volumen. | C | 6 |
+| RF-43 | Exportar una copia (archivo `.tar.gz`) de un volumen. Es una copia de seguridad manual, no un mecanismo de *rollback* de datos. | C | 6 |
 
 ### Redes y acceso
 
@@ -80,13 +81,13 @@
 
 | ID | Categoría | Requisito | Cómo se verificará |
 |---|---|---|---|
-| RNF-01 | Seguridad | Ningún contenedor de usuario se crea con `privileged`, capacidades añadidas, `network_mode: host`, PID/IPC del host ni montajes del sistema de archivos del host. | Tests unitarios de la política del agente + test de integración que lo intenta. |
+| RNF-01 | Seguridad | Ningún contenedor de usuario se crea con `privileged`, capacidades añadidas, `network_mode: host`, PID/IPC del host ni montajes del sistema de archivos del host. El agente construye internamente la configuración de Docker y no acepta parámetros de Docker arbitrarios (ADR-002). | Tests unitarios del agente (peticiones con campos extra rechazadas; configuración construida sin opciones peligrosas) + test de integración con `docker inspect`. |
 | RNF-02 | Seguridad | Solo el agente tiene acceso al socket de Docker. El control plane y el frontend no. | Revisión de `compose.yaml` + test que comprueba que el contenedor API no ve el socket. |
 | RNF-03 | Seguridad | El agente solo opera sobre recursos con la etiqueta `minipaas.managed=true`. | Test de integración: un contenedor ajeno no puede pararse ni borrarse. |
 | RNF-04 | Seguridad | Todas las entradas se validan con esquemas estrictos (nombres, imágenes, puertos, rutas). | Tests unitarios con entradas maliciosas. |
 | RNF-05 | Seguridad | Contraseñas almacenadas con hash lento (Argon2 o bcrypt); cookies `HttpOnly`, `SameSite=Strict`; protección CSRF en operaciones que modifican estado. | Tests de API. |
 | RNF-06 | Seguridad | Los procesos propios de MiniPaaS no se ejecutan como root dentro de sus contenedores (salvo justificación documentada). | `docker inspect` / test. |
-| RNF-07 | Rendimiento | Consumo de MiniPaaS en reposo < 250 MB de RAM y < 5 % de una CPU. | Medición con `docker stats` en la Fase 12. |
+| RNF-07 | Rendimiento | **Objetivo de diseño** (no verificado): consumo de MiniPaaS en reposo < 250 MB de RAM y < 5 % de una CPU. Seguirá siendo un objetivo, no un resultado, hasta que se mida. | Medición con `docker stats` en la Fase 12 (y mediciones orientativas desde la Fase 3). |
 | RNF-08 | Rendimiento | Las páginas del panel responden en < 1 s en red local (excepto operaciones de despliegue, que son asíncronas). | Medición en la Fase 12. |
 | RNF-09 | Fiabilidad | Si MiniPaaS se detiene o reinicia, las aplicaciones desplegadas siguen funcionando. | Test manual/integración. |
 | RNF-10 | Fiabilidad | Un despliegue fallido no deja contenedores huérfanos ni deja la aplicación sin servicio si había una versión anterior funcional. | Test de integración con imagen que falla. |

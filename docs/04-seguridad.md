@@ -1,7 +1,7 @@
 # 4. Seguridad y riesgos
 
-> Estado del documento: **propuesta de la Fase 0**. Las medidas descritas son de diseño; ninguna
-> está implementada ni verificada todavía.
+> Estado del documento: **aprobado por el equipo (2026-11-15)**. Las medidas descritas son de
+> diseño; ninguna está implementada ni verificada todavía.
 
 ## 4.1 Activos a proteger
 
@@ -15,7 +15,7 @@
 
 | # | Amenaza | Vector | Mitigación de diseño |
 |---|---|---|---|
-| A1 | Escalada al host mediante un contenedor privilegiado | Formulario o API que permita `privileged`, montajes `/`, `cap_add`, `network_mode: host` | El esquema de `RuntimeSpec` no contiene esos campos; el agente revalida y rechaza campos desconocidos; tests específicos. |
+| A1 | Escalada al host mediante un contenedor privilegiado | Formulario o API que permita `privileged`, montajes `/`, `cap_add`, `network_mode: host` | El agente nunca recibe parámetros de Docker: recibe una `ServiceRequest` de alto nivel y construye él mismo la configuración con valores seguros fijos; rechaza campos desconocidos; tests específicos (ADR-002). |
 | A2 | Acceso al socket de Docker desde el componente expuesto | Vulnerabilidad en el control plane | Solo el agente monta el socket; el control plane no lo tiene; agente sin puertos expuestos en una red `internal`. |
 | A3 | MiniPaaS afecta a servicios existentes del servidor | Error de programación o petición manipulada que actúe sobre otros contenedores | Etiqueta `minipaas.managed=true` comprobada en el agente en cada operación; nombres con prefijo; rango de puertos reservado. |
 | A4 | Acceso no autorizado al panel | Sin autenticación, fuerza bruta, robo de sesión | Login obligatorio, hash Argon2/bcrypt, limitación de intentos, cookie `HttpOnly`+`SameSite=Strict`, caducidad de sesión. |
@@ -49,6 +49,7 @@
 | Diferencias entre el entorno local (CachyOS, Docker 29) y el servidor (Ubuntu, versión desconocida) | Media | Medio | Ejecutar todo en contenedores; fijar versiones de imágenes base; prueba en VM Ubuntu antes de la Fase 13. |
 | Hardware limitado del servidor | Media | Medio | Presupuesto de memoria (RNF-07), sin componentes pesados, muestreo de métricas moderado. |
 | Alcance excesivo para el tiempo disponible | Alta | Alto | Prioridades MoSCoW; núcleo funcional primero; los «C» solo si sobra tiempo. |
+| Expectativa errónea de que un *rollback* recupera los datos | Media | Alto | El *rollback* se define como recuperación de la versión de la aplicación, no de los datos (ADR-011); advertencia en el panel antes de confirmar; documentado en la guía de uso. |
 | Complejidad que el equipo no pueda defender | Media | Alto | Código simple, documentación por fase, decisiones registradas. |
 | Rate limit de Docker Hub al descargar imágenes | Media | Bajo | Caché local de imágenes; imágenes pequeñas en los tests. |
 | Python 3.14 local frente a la imagen de producción | Baja | Bajo | Fijar la versión de Python en la imagen (3.12 o 3.13, la más reciente estable soportada por las dependencias) y probar con ella. |
@@ -57,7 +58,7 @@
 
 | Regla | Cumplimiento previsto |
 |---|---|
-| Sin `privileged: true` | Ni MiniPaaS ni las apps lo usan; el esquema no lo permite. |
+| Sin `privileged: true` | Ni MiniPaaS ni las apps lo usan; el agente construye la configuración y no acepta parámetros de Docker. |
 | Sin `network_mode: host` injustificado | No se usa. |
 | Sin montar `/` del host con escritura | Ningún montaje del host salvo el socket en el agente. |
 | Sin comandos arbitrarios desde la interfaz | No hay `exec` ni shell; solo operaciones de lista blanca. |

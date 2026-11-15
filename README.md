@@ -7,9 +7,9 @@ Trabajo de la asignatura *Gestión de Sistemas de Archivos y Servicios Distribui
 Título provisional: *«Diseño e implementación de una plataforma PaaS ligera para el despliegue y
 gestión de aplicaciones distribuidas»*.
 
-> **Estado actual: Fase 0 — análisis y arquitectura.** Todavía no hay código: el repositorio contiene
-> la documentación de requisitos, arquitectura y planificación. Nada de lo que se describe a
-> continuación está implementado aún.
+> **Estado actual: Fase 0 (análisis y arquitectura) cerrada y aprobada el 2026-11-15.** Todavía no
+> hay código: el repositorio contiene la documentación de requisitos, arquitectura y planificación.
+> Nada de lo que se describe a continuación está implementado aún.
 
 ## ¿Qué es?
 
@@ -20,7 +20,8 @@ límites de recursos.
 
 Capacidades objetivo: desplegar desde una imagen o una plantilla, variables de entorno y secretos,
 puertos, almacenamiento persistente, redes privadas por aplicación, logs, health checks, métricas,
-límites de recursos, historial de despliegues y vuelta atrás.
+límites de recursos, historial de despliegues y vuelta atrás a una versión anterior de la aplicación
+(la vuelta atrás no revierte los datos persistentes).
 
 ## Arquitectura en una frase
 
