@@ -1,4 +1,7 @@
+from pathlib import Path
+
 import httpx
+from conftest import make_settings
 from fastapi.testclient import TestClient
 
 from minipaas.controlplane.agent_client import AgentClient
@@ -6,8 +9,9 @@ from minipaas.controlplane.main import create_app
 
 
 def make_client(handler) -> TestClient:
+    # Sin `with`: no se ejecuta el arranque (migraciones); /api/health no usa la base de datos.
     agent = AgentClient("http://agent:8001", "t" * 40, transport=httpx.MockTransport(handler))
-    return TestClient(create_app(agent))
+    return TestClient(create_app(make_settings(Path("/nonexistent")), agent))
 
 
 def agent_ok(request: httpx.Request) -> httpx.Response:
@@ -93,7 +97,7 @@ def test_serves_panel():
     assert client.get("/js/app.js").status_code == 200
 
 
-def test_agent_client_closed_on_shutdown():
+def test_agent_client_closed_on_shutdown(tmp_path):
     closed = []
 
     class SpyAgentClient(AgentClient):
@@ -102,6 +106,8 @@ def test_agent_client_closed_on_shutdown():
             await super().aclose()
 
     agent = SpyAgentClient("http://agent:8001", "t" * 40, transport=httpx.MockTransport(agent_ok))
-    with TestClient(create_app(agent)):  # el bloque with ejecuta arranque y apagado
+    with TestClient(
+        create_app(make_settings(tmp_path), agent)
+    ):  # el bloque with ejecuta arranque y apagado
         pass
     assert closed == [True]
