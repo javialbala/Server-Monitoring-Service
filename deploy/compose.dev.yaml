@@ -5,15 +5,15 @@
 name: minipaas-dev
 
 networks:
-  # Sin salida a Internet y sin puertos publicados: solo control plane y agente se ven aquí.
+  # Sin salida a Internet y sin puertos publicados: solo el panel y el agente se ven aquí.
   minipaas-internal:
     internal: true
-  # Red normal, solo para el control plane (necesaria para publicar su puerto en localhost).
+  # Red normal, solo para el panel (necesaria para publicar su puerto en localhost).
   minipaas-public:
 
 volumes:
-  # Base de datos del control plane. Persiste a `down`, `restart` y reconstrucciones de la
-  # imagen; solo `docker compose down -v` (o `docker volume rm`) la borra.
+  # Guarda SOLO el hash de la contraseña del panel (/data/password_hash). Persiste a `down`,
+  # `restart` y reconstrucciones; solo `docker compose down -v` (o `docker volume rm`) lo borra.
   minipaas-data:
 
 # Un archivo por componente con el MISMO token: cada uno con permisos 600 y propietario el
@@ -36,14 +36,14 @@ services:
     read_only: true              # sistema de archivos raíz de solo lectura
     tmpfs: [/tmp]                # escribible, en memoria
     volumes:
-      - minipaas-data:/data      # único sitio persistente y escribible (UID 10001)
+      - minipaas-data:/data      # hash de la contraseña; único sitio escribible (UID 10001)
     cap_drop: [ALL]              # sin capabilities de Linux
     security_opt: ["no-new-privileges:true"]   # impide ganar privilegios (setuid...)
     secrets: [controlplane_token]
     environment:
       MINIPAAS_AGENT_TOKEN_FILE: /run/secrets/controlplane_token
     labels:
-      minipaas.component: controlplane   # sin minipaas.managed: el agente no lo gestiona
+      minipaas.component: controlplane
     healthcheck:
       test:
         - CMD
@@ -66,8 +66,20 @@ services:
     networks: [minipaas-internal]
     volumes:
       # Único componente con acceso al socket de Docker. Equivale a root sobre el host
-      # (ver ADR-002): por eso el agente es mínimo, autenticado y con política estricta.
+      # (ver ADR-002): por eso el agente es mínimo, autenticado y su código SOLO consulta
+      # (listar contenedores y ping). Montar el socket con :ro no limitaría la API de Docker,
+      # así que no se usa: la garantía de solo lectura está en el código del agente (ADR-037).
       - /var/run/docker.sock:/var/run/docker.sock
+      # Sistema de archivos raíz del anfitrión, en solo lectura y SIN submontajes
+      # (recursive: disabled): /hostfs no incluye /proc, /sys, /home ni otros discos montados.
+      # Sirve para medir el disco raíz (statvfs) y leer /etc/os-release y /etc/hostname del
+      # anfitrión (ADR-038). El agente no es root: solo puede leer archivos legibles por todos.
+      - type: bind
+        source: /
+        target: /hostfs
+        read_only: true
+        bind:
+          recursive: disabled
     # Permite usar el socket siendo UID 10002 (no root), añadiendo el grupo docker del host.
     group_add: ["${DOCKER_GID:?Define DOCKER_GID en deploy/.env (ver scripts/prepare_dev_env.sh)}"]
     read_only: true
@@ -77,5 +89,6 @@ services:
     secrets: [agent_token]
     environment:
       MINIPAAS_AGENT_TOKEN_FILE: /run/secrets/agent_token
+      MINIPAAS_HOSTFS: /hostfs
     labels:
-      minipaas.component: agent   # sin minipaas.managed: el agente no puede gestionarse a sí mismo
+      minipaas.component: agent
