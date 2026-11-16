@@ -33,7 +33,7 @@ lo descrito sobre la plataforma es **diseño propuesto**, no funcionalidad imple
   (`~%-50%`), categoría `$CATEGORY: $course$/Valor por defecto para Gestion de Archivos y Servicios
   Distribuidos/<Trabajo>-<Apellidos>`. Se ha identificado como **entregable obligatorio** y se ha
   incorporado a la Fase 13. Por indicación del equipo se ha **versionado sin ninguna modificación**
-  en su ubicación original (commit `7275902`), verificando que su SHA-256 es idéntico antes y después
+  en su ubicación original (commit `8dc4833`), verificando que su SHA-256 es idéntico antes y después
   (`af7d4826…f694`).
 - No existía código del antiguo *Server Control Center* en el repositorio: el proyecto parte de cero.
 - Entorno local de desarrollo verificado: Python 3.14.8, Docker 29.9.2, Docker Compose 5.6.1; el
@@ -270,17 +270,17 @@ relación y secuencia de despliegue. `docs/06-roadmap.md`: dependencias entre fa
 
 | Rama | Contenido | Estado |
 |---|---|---|
-| `main` | Solo el commit inicial `7e9ef18` (necesario porque el repositorio no tenía ningún commit y hacía falta una base para la rama de la fase) | Local |
+| `main` | Solo el commit inicial `cd2b30f` (necesario porque el repositorio no tenía ningún commit y hacía falta una base para la rama de la fase) | Local |
 | `fase-00-analisis` | Todos los commits de la Fase 0 | Local. Fusión en `main` tras la aprobación del equipo y cuando el *push* sea posible |
 
 ### Commits (identificadores reales)
 
 | Commit | Rama | Mensaje | Contenido |
 |---|---|---|---|
-| `7e9ef18` | `main` | `chore: inicializa el repositorio con .gitignore` | `.gitignore` |
-| `6c830fc` | `fase-00-analisis` | `docs: documentación inicial de la Fase 0` | `README.md`, `CHANGELOG.md` y los 13 documentos de `docs/` (1550 líneas añadidas) |
-| `7275902` | `fase-00-analisis` | `docs: conserva sin modificar la plantilla del cuestionario GIFT` | `formato_preguntas.md` sin cambios (SHA-256 verificado) |
-| `9f81eed` | `fase-00-analisis` | `docs: incorpora las aprobaciones y matices de la revisión de la Fase 0` | 13 archivos: ADR, requisitos, arquitectura, seguridad, pruebas, roadmap, informe, registro |
+| `cd2b30f` | `main` | `chore: inicializa el repositorio con .gitignore` | `.gitignore` |
+| `757f2ce` | `fase-00-analisis` | `docs: documentación inicial de la Fase 0` | `README.md`, `CHANGELOG.md` y los 13 documentos de `docs/` (1550 líneas añadidas) |
+| `8dc4833` | `fase-00-analisis` | `docs: conserva sin modificar la plantilla del cuestionario GIFT` | `formato_preguntas.md` sin cambios (SHA-256 verificado) |
+| `2f98b85` | `fase-00-analisis` | `docs: incorpora las aprobaciones y matices de la revisión de la Fase 0` | 13 archivos: ADR, requisitos, arquitectura, seguridad, pruebas, roadmap, informe, registro |
 | *(commit siguiente)* | `fase-00-analisis` | `docs: registra en el informe de la Fase 0 los commits y el resultado del push` | Este apartado F. Un commit no puede contener su propio identificador; se consulta con `git log` |
 
 ### Push: **pendiente (fallido, no simulado)**

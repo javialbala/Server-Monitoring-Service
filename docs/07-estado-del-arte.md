@@ -1,7 +1,9 @@
 # 7. Fundamentos y estado del arte
 
 > Estado del documento: **primera versión (Fase 0)**. Las afirmaciones marcadas con *(verificar)*
-> deben contrastarse con la fuente primaria antes de pasar a la memoria final.
+> deben contrastarse con la fuente primaria antes de pasar a la memoria final. El apartado 7.6 se
+> añadió en la renovación (2026-11-16); los apartados 7.1 a 7.5 describen la etapa PaaS original y se
+> conservan como contexto teórico.
 
 ## 7.1 Definición de cloud computing (NIST SP 800-145)
 
@@ -137,3 +139,23 @@ blanca y protección de los recursos ajenos), adecuada para estudiar cómo funci
 | Monitorización y observabilidad | Métricas, logs, health checks, estado deseado frente a estado real. |
 | Seguridad | Mínimo privilegio, defensa en profundidad, modelo de amenazas, autenticación. |
 | Tolerancia a fallos | Restauración automática de despliegues fallidos, políticas de reinicio, reconciliación. |
+
+## 7.6 Herramientas de monitorización comparables (renovación)
+
+Con el cambio de objetivo (ADR-036) el proyecto pasa a ser una herramienta de **monitorización de
+solo lectura**. Estas son las alternativas conocidas con las que se compara. La descripción es
+general y no se aportan cifras de consumo ni rendimiento, porque no se han medido.
+
+| Herramienta | Idea | Diferencia con este proyecto |
+|---|---|---|
+| **Netdata** | Agente de monitorización en tiempo real con muchísimas métricas, gráficas e historial | Mucho más completo y complejo; este proyecto muestra solo el estado actual con pocas métricas |
+| **Glances** | Monitor del sistema escrito en Python, con interfaz de terminal y modo web | Similar en espíritu; no está pensado para separar el proceso expuesto del acceso a Docker ni para tener inicio de sesión propio |
+| **cAdvisor** | Recoge el uso de recursos de los contenedores (de Google) | Se centra en métricas por contenedor; aquí solo se listan los contenedores y el estado del anfitrión |
+| **Prometheus + node_exporter** | `node_exporter` expone métricas del anfitrión que Prometheus recoge y almacena | Estándar profesional con historial y alertas, pero requiere varios componentes; el montaje `/hostfs` de este proyecto se inspira en el de `node_exporter`, más restringido (sin submontajes) |
+| **Portainer** | Interfaz web de gestión de Docker | Permite **crear y modificar** contenedores; este proyecto lo prohíbe expresamente |
+
+**Qué aporta este proyecto:** una herramienta pequeña que el equipo puede leer y explicar entera,
+con un diseño de seguridad explícito (panel sin socket, agente de solo lectura, sin dependencias
+nuevas) y que muestra en una sola pantalla el anfitrión y todos los contenedores, también los creados
+fuera de ella. No pretende competir en funcionalidad con las herramientas anteriores, que son más
+completas.

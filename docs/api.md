@@ -1,127 +1,106 @@
-# API del control plane
+# API de la plataforma
 
-> Estado: **implementado y verificado en la Fase 2** (2026-11-15). Solo incluye las rutas que existen;
-> las de despliegue llegarán en fases posteriores.
+> Estado: **implementado y verificado en la renovación** (2026-11-16): `tests/panel`, `tests/agent`,
+> `scripts/e2e_monitor.sh` y `scripts/e2e_ui.py`. La API de la etapa PaaS (aplicaciones, auditoría,
+> `/api/auth/*`) ya no existe.
 
-La API REST la sirve el control plane en el mismo origen que el panel (`http://127.0.0.1:8000` en
-desarrollo). FastAPI genera además la especificación OpenAPI en `/openapi.json`. Las páginas
-interactivas `/docs` y `/redoc` están **desactivadas** porque cargan recursos de un CDN (prohibido en
-el proyecto y bloqueado por la CSP). La API interna del agente **no** forma parte de esta API ni se
-expone.
+Hay dos APIs: la del **panel** (la ve el navegador) y la **interna del agente** (solo la ve el panel).
+Ninguna tiene `/docs` ni `/redoc`.
 
-## Convenciones
+## 1. API del panel (puerto 8000, `http://127.0.0.1:8000` en desarrollo)
+
+### Convenciones
 
 | Aspecto | Regla |
 |---|---|
-| Formato | JSON en peticiones y respuestas (`Content-Type: application/json`) |
-| Autenticación | Cookie de sesión `minipaas_session` (`HttpOnly`, `SameSite=Strict`, `Path=/`; `Secure` con HTTPS) |
-| CSRF | `POST`, `PATCH` y `DELETE` autenticados exigen la cabecera `X-CSRF-Token` con el token de la sesión |
-| Origen | Toda petición no segura con cabecera `Origin` distinta del propio origen recibe 403 |
-| Errores | `{"detail": "mensaje en español"}`; los errores de validación de Pydantic (422) devuelven `{"detail": [{"loc": [...], "msg": "...", "type": "..."}]}` |
-| Caché | Todas las respuestas de `/api/` llevan `Cache-Control: no-store` |
-| Fechas | ISO 8601 en UTC con segundos, p. ej. `2026-11-15T17:47:03+00:00` |
+| Formato | JSON |
+| Autenticación | Cookie `minipaas_session` (`HttpOnly`, `SameSite=Strict`, `Path=/`; `Secure` si `MINIPAAS_COOKIE_SECURE=true`) |
+| CSRF | El cierre de sesión exige la cabecera `X-CSRF-Token` con el token de la sesión |
+| Origen | Las peticiones no seguras (`POST`...) con cabecera `Origin` distinta del propio origen reciben 403 |
+| Errores | `{"detail": "mensaje en español"}`; los errores de validación (422) usan el formato de Pydantic |
+| Caché | Las respuestas de `/api/` llevan `Cache-Control: no-store` |
+| Cabeceras | CSP `default-src 'self'`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `X-Frame-Options: DENY` |
+| Archivos estáticos | Se sirven en `/` (panel web) |
 
-### Códigos de error comunes
-
-| Código | Significado |
-|---|---|
-| 401 | `Sesión no iniciada o caducada` (y se borra la cookie si era inválida) |
-| 403 | `Token CSRF ausente o no válido` u `Origen de la petición no permitido` |
-| 404 | Recurso inexistente |
-| 409 | Conflicto (identificador repetido) |
-| 422 | Datos no válidos |
-| 429 | Demasiados intentos de inicio de sesión (cabecera `Retry-After` en segundos) |
-
-## Estado
-
-### `GET /api/health` — público
-
-```json
-{"status": "ok", "agent": {"reachable": true}, "docker": {"reachable": true}}
-```
-
-`status` es `"degraded"` si el agente o Docker no responden. Siempre 200.
-
-## Autenticación
-
-### `GET /api/auth/session` — público
-
-Lo usa el panel al cargar para decidir qué pantalla mostrar.
-
-```json
-{"authenticated": true, "setup_required": false, "user": {"username": "admin"}, "csrf_token": "…"}
-```
-
-Sin sesión: `authenticated: false`, `user: null`, `csrf_token: null`. `setup_required` es `true`
-mientras no exista ningún administrador.
-
-### `POST /api/auth/login` — público
-
-```json
-{"username": "admin", "password": "…"}
-```
-
-| Respuesta | Cuerpo |
-|---|---|
-| 200 + `Set-Cookie` | `{"user": {"username": "admin"}, "csrf_token": "…"}` |
-| 401 | `{"detail": "Usuario o contraseña incorrectos"}` (idéntico exista o no el usuario) |
-| 429 + `Retry-After` | `{"detail": "Demasiados intentos fallidos. Inténtalo de nuevo más tarde."}` |
-
-Cada login crea un identificador de sesión nuevo y revoca el anterior del mismo navegador.
-
-### `POST /api/auth/logout` — sesión + CSRF
-
-204. Revoca la sesión en el servidor y borra la cookie.
-
-### `GET /api/auth/me` — sesión
-
-```json
-{"username": "admin", "created_at": "2026-11-15T17:40:12+00:00"}
-```
-
-## Aplicaciones
-
-Representación de una aplicación (el identificador numérico interno no se expone):
-
-```json
-{
-  "slug": "mi-blog",
-  "name": "Mi blog",
-  "description": "WordPress para el blog familiar",
-  "status": "draft",
-  "status_label": "Sin desplegar",
-  "created_at": "2026-11-15T17:47:03+00:00",
-  "updated_at": "2026-11-15T17:47:03+00:00"
-}
-```
-
-| Campo | Reglas |
-|---|---|
-| `name` | 1–100 caracteres |
-| `slug` | `^[a-z][a-z0-9-]{1,38}[a-z0-9]$`, sin `--`; opcional al crear (se deriva del nombre); **inmutable** |
-| `description` | 0–500 caracteres |
-| `status` | Estado lógico; en esta fase solo `draft` («Sin desplegar») |
+### Rutas
 
 | Método y ruta | Protección | Respuestas |
 |---|---|---|
-| `GET /api/applications` | sesión | 200 `{"items": [ … ]}`, más recientes primero |
-| `POST /api/applications` | sesión + CSRF | 201 aplicación · 409 identificador repetido · 422 |
-| `GET /api/applications/{slug}` | sesión | 200 · 404 `Aplicación no encontrada` |
-| `PATCH /api/applications/{slug}` | sesión + CSRF | 200 · 404 · 422 (incluido intentar cambiar `slug`) |
-| `DELETE /api/applications/{slug}` | sesión + CSRF | 204 · 404 |
+| `GET /api/health` | pública | 200 `{"status": "ok"}` (healthcheck del contenedor) |
+| `GET /api/session` | pública | 200 `{"authenticated": bool, "csrf_token": str\|null}` |
+| `POST /api/login` | pública | 204 + cookie · 401 `Contraseña incorrecta` · 422 · 429 + `Retry-After` · 503 `No hay contraseña configurada` |
+| `POST /api/logout` | sesión + CSRF | 204 · 401 sin sesión · 403 sin token CSRF |
+| `GET /api/metrics` | sesión | 200 (JSON del agente) · 401 · 502 `El agente no responde` |
+| `GET /api/containers` | sesión | 200 (JSON del agente) · 401 · 502 |
 
-Cuerpo de `POST`: `{"name": "...", "slug": "..." | null, "description": "..."}`.
-Cuerpo de `PATCH`: `{"name"?: "...", "description"?: "..."}`. Se rechazan campos desconocidos.
+Cuerpo de `POST /api/login`: `{"password": "..."}` (1 a 128 caracteres; la contraseña no se recorta).
+Tras 5 fallos en 15 minutos desde una IP se responde 429 aunque la contraseña sea correcta.
+Cada login correcto crea un identificador de sesión nuevo y revoca el anterior del mismo navegador.
+Una sesión caduca a los 30 minutos de inactividad o a las 8 horas de su creación.
 
-## Ejemplo con `curl`
+## 2. API interna del agente (puerto 8001, solo en la red interna)
+
+Todas las rutas son `GET` y exigen `Authorization: Bearer <token>` (401 `No autorizado` si falta o es
+incorrecto, sin distinguir cuál). Sin documentación OpenAPI.
+
+### `GET /health`
+
+```json
+{"status": "ok", "docker": {"reachable": true, "server_version": "29.9.2"}}
+```
+
+Si Docker no responde: `"reachable": false, "server_version": null` (sigue siendo 200).
+
+### `GET /metrics`
+
+```json
+{
+  "collected_at": "2026-11-16T10:00:00Z",
+  "hostname": "servidor",
+  "os": {"name": "Ubuntu 24.04.1 LTS", "kernel": "6.8.0-45-generic", "architecture": "x86_64"},
+  "uptime_seconds": 12345,
+  "cpu": {"percent": 12.5, "cores": 8, "model": "Intel(R) ..."},
+  "memory": {"total_bytes": 0, "used_bytes": 0, "available_bytes": 0, "percent": 0.0},
+  "disk": {"path": "/", "total_bytes": 0, "used_bytes": 0, "free_bytes": 0, "percent": 0.0},
+  "temperatures": [{"sensor": "x86_pkg_temp", "celsius": 45.0}]
+}
+```
+
+(Los valores son de ejemplo.) `hostname`, `os.name`, `uptime_seconds` y `cpu.model` son `null` si no se
+pueden leer; `temperatures` es una lista vacía si no hay sensores.
+
+| Cálculo | Regla |
+|---|---|
+| CPU % | `100 × (1 − Δidle / Δtotal)` con dos lecturas de `/proc/stat` separadas 0,5 s; `idle = idle + iowait`; 1 decimal |
+| RAM | `usada = MemTotal − MemAvailable`; `porcentaje = usada / total × 100` |
+| Disco | `statvfs`: `total = f_blocks·f_frsize`, `libre = f_bavail·f_frsize`, `usado = (f_blocks − f_bfree)·f_frsize`, `porcentaje = usado / (usado + libre) × 100` (como `df`) |
+| Temperatura | `/sys/class/thermal/thermal_zone*/temp` en milésimas de grado → °C |
+
+### `GET /containers`
+
+```json
+{
+  "collected_at": "2026-11-16T10:00:00Z",
+  "containers": [
+    {"id": "abc123def456", "name": "jellyfin", "image": "jellyfin/jellyfin:latest",
+     "state": "running", "status": "Up 3 hours", "created_at": "2026-11-01T08:00:00Z",
+     "ports": [{"container_port": 8096, "protocol": "tcp", "host_ip": "0.0.0.0", "host_port": 8096}],
+     "compose_project": "media", "compose_service": "jellyfin"}
+  ]
+}
+```
+
+Solo contenedores en ejecución, ordenados por nombre. Un puerto no publicado tiene `host_ip` y
+`host_port` a `null`. Si Docker no responde: 503 `{"detail": "Docker no está disponible"}`.
+
+## 3. Ejemplo con `curl` (panel)
 
 ```bash
 B=http://127.0.0.1:8000
 curl -s -c cookies.txt -H 'Content-Type: application/json' \
-     -d '{"username":"admin","password":"<tu contraseña>"}' $B/api/auth/login   # devuelve csrf_token
-curl -s -b cookies.txt $B/api/applications
-curl -s -b cookies.txt -H 'Content-Type: application/json' -H "X-CSRF-Token: <csrf_token>" \
-     -d '{"name":"Mi blog"}' $B/api/applications
+     -d '{"password":"<tu contraseña>"}' $B/api/login -i       # 204 + cookie
+curl -s -b cookies.txt $B/api/metrics
+curl -s -b cookies.txt $B/api/containers
 ```
 
 (Escribir la contraseña en la línea de órdenes la deja en el historial de la shell; en el panel no

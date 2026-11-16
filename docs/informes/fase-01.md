@@ -211,17 +211,17 @@ SDK de Docker.
 
 | Commit | Rama | Mensaje |
 |---|---|---|
-| `8927b50` | `fase-01-estructura` | `feat: estructura del paquete con control plane y agente mínimos` |
-| `23791cb` | `fase-01-estructura` | `feat: entorno de desarrollo aislado con Docker Compose` |
-| `c277f12` | `fase-01-estructura` | `test: integración continua con ruff y pytest en GitHub Actions` |
-| `b355ad4` | `fase-01-estructura` | `docs: guía de desarrollo, ADR-013 a 015 e informe de la Fase 1` |
-| `9d5145d` | `fase-01-estructura` | `security: token con permisos 600 por componente y directorio 700` (revisión) |
-| `15738cc` | `fase-01-estructura` | `feat: imágenes reproducibles a partir de uv.lock con hashes` (revisión) |
-| `12d457f` | `fase-01-estructura` | `docs: revisión de la Fase 1 (permisos del token y reproducibilidad)` |
+| `85d8848` | `fase-01-estructura` | `feat: estructura del paquete con control plane y agente mínimos` |
+| `b1e78ea` | `fase-01-estructura` | `feat: entorno de desarrollo aislado con Docker Compose` |
+| `b19d20a` | `fase-01-estructura` | `test: integración continua con ruff y pytest en GitHub Actions` |
+| `c3fde1c` | `fase-01-estructura` | `docs: guía de desarrollo, ADR-013 a 015 e informe de la Fase 1` |
+| `1f66694` | `fase-01-estructura` | `security: token con permisos 600 por componente y directorio 700` (revisión) |
+| `ae44fa2` | `fase-01-estructura` | `feat: imágenes reproducibles a partir de uv.lock con hashes` (revisión) |
+| `e29f062` | `fase-01-estructura` | `docs: revisión de la Fase 1 (permisos del token y reproducibilidad)` |
 | *(siguiente)* | `fase-01-estructura` | `docs: registra los commits de la revisión en el informe de la Fase 1` (contiene esta tabla) |
 
 Otras operaciones: la rama `fase-00-analisis` se fusionó en `main` por *fast-forward* (hasta
-`e7a93fe`) al autorizarse el inicio de la Fase 1; `fase-01-estructura` parte de ese punto.
+`fbbef6e`) al autorizarse el inicio de la Fase 1; `fase-01-estructura` parte de ese punto.
 
 Historia: lineal, sin reescrituras ni *push* forzado. Árbol de trabajo limpio tras el último commit.
 

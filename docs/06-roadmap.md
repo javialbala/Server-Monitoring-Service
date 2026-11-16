@@ -1,8 +1,38 @@
 # 6. Roadmap
 
-> Estado del documento: **aprobado por el equipo (2026-11-15)**.
+> Estado del documento: **reescrito en la renovación (2026-11-16)**. Las fases 0 a 3 se conservan en el
+> apartado 6.4 como historia.
 
-## 6.1 Cambios respecto a la planificación inicial
+## 6.1 Situación actual
+
+| Etapa | Estado |
+|---|---|
+| Fase 0: análisis y arquitectura | Aprobada |
+| Fase 1: estructura y entorno aislado | Aprobada |
+| Fase 2: control plane, SQLite, autenticación y aplicaciones | Aprobada (es la base de la renovación) |
+| Fase 3: motor de despliegue | Desarrollada en la rama `fase-03-motor-despliegue`, **no aprobada**, conservada intacta y fuera del nuevo objetivo |
+| **Renovación: plataforma de monitorización** | **Cerrada, pendiente de aprobación** (rama `renovacion-monitorizacion`, informe `informes/renovacion-monitorizacion.md`) |
+
+## 6.2 Cambio de rumbo
+
+El 2026-11-16 el usuario aprobó sustituir el objetivo PaaS por una plataforma de monitorización de
+solo lectura (ADR-036). Las Fases 4 a 13 originales (despliegues, configuración, almacenamiento,
+redes, recursos, etc.) quedan **canceladas**.
+
+## 6.3 Fases siguientes (propuestas)
+
+| Fase | Contenido | Criterio de aceptación |
+|---|---|---|
+| **A. Mejora de la interfaz** (siguiente, la pide el usuario) | Revisión visual y de usabilidad del panel: diseño, jerarquía, barras de uso, colores de estado, responsive, textos, accesibilidad básica. Sin cambiar la API ni el modelo de seguridad | Recorrido en navegador sin errores; prueba de `e2e_ui.py` actualizada; revisión del equipo |
+| **B. Despliegue en el servidor Ubuntu real** (con autorización expresa del usuario) | Probar antes en Ubuntu o VM; `compose` de despliegue; guía de instalación; decidir HTTPS y `MINIPAAS_COOKIE_SECURE`; reejecutar `verify_dev_env.sh`; medir consumo | Funciona en el servidor sin afectar a sus servicios; consumo medido |
+| **C. Cierre académico** | Memoria, presentación, cuestionario de la asignatura | Documentación completa |
+
+Posibles mejoras posteriores, no planificadas: proxy del socket de Docker, temperaturas más
+legibles, red del anfitrión, historial de métricas.
+
+## 6.4 Historia: roadmap de la etapa PaaS
+
+### Cambios respecto a la planificación inicial (2026-11-15)
 
 | Cambio | Motivo |
 |---|---|
@@ -14,10 +44,9 @@
 
 Estos cambios fueron **aprobados por el equipo el 2026-11-15**.
 
-## 6.2 Fases
+### Fases planificadas
 
-Estado a 2026-11-15: Fases 0 y 1 **aprobadas**; Fase 2 **terminada, pendiente de aprobación**; el
-resto, pendientes.
+Estado a 2026-11-15, antes de la renovación: Fases 0, 1 y 2 aprobadas; el resto, pendientes (hoy retiradas).
 
 | Fase | Nombre | Objetivo y entregables principales | Criterio de aceptación |
 |---|---|---|---|
@@ -36,7 +65,7 @@ resto, pendientes.
 | 12 | Pruebas de integración y evaluación | Batería completa de integración, medición de consumo y tiempos, comparación con requisitos (incluida la verificación del objetivo de diseño de < 250 MB, RNF-07). | Informe de evaluación con resultados reales. |
 | 13 | Despliegue final, demostración y documentación | Instalación en el servidor (con autorización), guía de instalación y uso, memoria, presentación, cuestionario GIFT. | Plataforma funcionando en el servidor sin afectar a los servicios existentes; demo preparada. |
 
-## 6.3 Dependencias entre fases
+### Dependencias entre fases
 
 ```mermaid
 flowchart LR
@@ -54,7 +83,7 @@ flowchart LR
 
 Las fases 5, 6 y 8 son relativamente independientes entre sí una vez terminada la 4.
 
-## 6.4 Procedimiento de cada fase
+### Procedimiento de cada fase
 
 1. Rama `fase-NN-nombre` creada desde `main`.
 2. Objetivos, requisitos y criterios de aceptación concretos.
@@ -63,6 +92,6 @@ Las fases 5, 6 y 8 son relativamente independientes entre sí una vez terminada 
 5. Pruebas y registro en `registro-pruebas.md`.
 6. Revisión de seguridad si la fase añade superficie.
 7. Actualización de documentación y `CHANGELOG.md`.
-8. Informe para Gemini en `docs/informes/`.
+8. Informe de cierre en `docs/informes/`.
 9. Presentación de resultados y **espera de aprobación** antes de fusionar en `main` y comenzar la
    siguiente fase.

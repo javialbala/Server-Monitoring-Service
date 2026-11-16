@@ -1,7 +1,37 @@
 # Registro de cambios
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Las versiones se
-corresponden con las fases del proyecto.
+corresponden con las fases del proyecto y con la renovación.
+
+## [Renovación: plataforma de monitorización] — 2026-11-16 (pendiente de aprobación)
+
+Cambio de objetivo aprobado por el usuario (ADR-036): de PaaS a plataforma web ligera de
+**monitorización y consulta de solo lectura**. Rama `renovacion-monitorizacion`, creada desde la
+Fase 2. La Fase 3 (rama `fase-03-motor-despliegue`) no se aprobó y se conserva intacta.
+
+### Añadido
+
+- Agente de solo lectura: `GET /health`, `/metrics` (CPU, RAM, disco, SO, kernel, hostname, uptime,
+  temperaturas) y `/containers` (contenedores en ejecución, con proyecto y servicio de Compose).
+- Métricas con la biblioteca estándar leyendo `/proc`, `/sys` y `statvfs`, sin `psutil`.
+- Montaje del `/` del anfitrión en `/hostfs`, solo lectura y sin submontajes.
+- Panel con tarjetas de métricas y tabla de contenedores, actualizados cada 5 s con pausa en
+  pestaña oculta.
+- Contraseña única con CLI `manage set-password` (hash Argon2id en `/data/password_hash`).
+- `scripts/e2e_monitor.sh` (29 comprobaciones) y `scripts/e2e_ui.py` (11, con Playwright vía `uvx`).
+- ADR-036 a ADR-041; informe `docs/informes/renovacion-monitorizacion.md`.
+
+### Cambiado
+
+- Sesiones en memoria; el límite de intentos de login pasa a ser solo por IP.
+- Documentación (01 a 08, api, guía) reescrita; las ADR obsoletas quedan marcadas como sustituidas.
+- 48 tests (antes 214 en la Fase 2); 1 492 líneas de código fuente (antes 2 967).
+
+### Eliminado
+
+- SQLite, migraciones, repositorios, auditoría en BD, aplicaciones, usuarios (`create-admin`),
+  `MINIPAAS_DB_PATH` y `scripts/e2e_phase2.sh`.
+- Sin cambios en dependencias (`pyproject.toml`, `uv.lock` y `deploy/requirements`).
 
 ## [Fase 2] — 2026-11-15 (pendiente de aprobación)
 
@@ -66,5 +96,5 @@ corresponden con las fases del proyecto.
 - Documentación inicial: visión y alcance, requisitos, arquitectura, seguridad y riesgos, estrategia
   de pruebas, roadmap, estado del arte, estructura del proyecto.
 - Registro de decisiones técnicas (ADR-001 a ADR-012).
-- Registro de pruebas, bibliografía e informe de la Fase 0 para Gemini.
+- Registro de pruebas, bibliografía e informe de la Fase 0.
 - `.gitignore` inicial.

@@ -224,7 +224,7 @@ Cada ADR de `docs/decisiones.md` incluye problema, alternativas, decisión y jus
 ## 12. Archivos creados, modificados y eliminados
 
 Resumen: **54 creados, 28 modificados, 0 eliminados** (4 979 líneas añadidas, 124 eliminadas,
-comparando `24e5a7b..HEAD` antes de este informe).
+comparando `794bdde..HEAD` antes de este informe).
 
 | Tipo | Archivos |
 |---|---|
@@ -269,8 +269,8 @@ Detalle y salidas en `docs/registro-pruebas.md` (entradas 2.1–2.13).
 
 | Error | Cómo se detectó | Solución |
 |---|---|---|
-| La imagen del agente incluía `argon2-cffi` y `httpx` | Revisión del informe del subagente | Extras por componente (`e43ff57`); imagen del agente de 211 a 206 MB |
-| `/docs` y `/redoc` cargaban recursos de `cdn.jsdelivr` y quedaban rotos por la CSP | Revisión al documentar la API | Desactivados, con test (`2cd9e44`) |
+| La imagen del agente incluía `argon2-cffi` y `httpx` | Revisión del informe del subagente | Extras por componente (`679529d`); imagen del agente de 211 a 206 MB |
+| `/docs` y `/redoc` cargaban recursos de `cdn.jsdelivr` y quedaban rotos por la CSP | Revisión al documentar la API | Desactivados, con test (`6297e77`) |
 | 404 de `/favicon.ico` en la consola | Recorrido en navegador | `favicon.svg` local |
 | El E2E dejaba imágenes `minipaas-e2e-*` | Revisión de restos tras el E2E | `down -v --rmi local` |
 | Contradicción del diseño: la descripción del estado `draft` no coincidía con `status_label` | Detectada por el subagente | La migración usa «Sin desplegar» (aún no publicada, sin impacto) |
@@ -296,22 +296,22 @@ Detalle y salidas en `docs/registro-pruebas.md` (entradas 2.1–2.13).
 ## 16. Commits realizados
 
 Rama `fase-02-persistencia-auth`, creada desde `main` tras fusionar (fast-forward, local) la Fase 1
-aprobada en `24e5a7b`.
+aprobada en `794bdde`.
 
 | Commit | Mensaje |
 |---|---|
-| `e43ff57` | `build: dependencias por componente y argon2-cffi para el control plane` |
-| `f531c26` | `feat: persistencia SQLite, aplicaciones, autenticación, CSRF y auditoría` |
-| `fc7ada6` | `feat: panel con inicio de sesión y gestión de aplicaciones` |
-| `f61fdc6` | `feat: volumen persistente de datos y prueba extremo a extremo` |
-| `2cd9e44` | `security: desactiva /docs y /redoc, que dependen de un CDN` |
-| `001e492` | `docs: Fase 2 (API, arquitectura, seguridad, pruebas, guía y ADR-016 a 024)` |
+| `679529d` | `build: dependencias por componente y argon2-cffi para el control plane` |
+| `57d1bb7` | `feat: persistencia SQLite, aplicaciones, autenticación, CSRF y auditoría` |
+| `3a4a115` | `feat: panel con inicio de sesión y gestión de aplicaciones` |
+| `dc104b7` | `feat: volumen persistente de datos y prueba extremo a extremo` |
+| `6297e77` | `security: desactiva /docs y /redoc, que dependen de un CDN` |
+| `fac21ed` | `docs: Fase 2 (API, arquitectura, seguridad, pruebas, guía y ADR-016 a 024)` |
 | *(siguiente)* | `docs: informe de cierre de la Fase 2` (contiene este informe) |
 
 ## 17. Estado real del repositorio
 
 - Rama actual: `fase-02-persistencia-auth`; árbol de trabajo limpio tras el último commit.
-- `main` local apunta a `24e5a7b` (Fase 1). El remoto solo contiene `fase-01-estructura` (subida por
+- `main` local apunta a `794bdde` (Fase 1). El remoto solo contiene `fase-01-estructura` (subida por
   el equipo); **no se ha hecho *push*** de nada de esta fase, por indicación expresa.
 - Historia lineal, sin reescrituras.
 - Recursos Docker locales: volumen `minipaas-dev_minipaas-data` (base de datos de desarrollo, vacía

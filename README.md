@@ -1,41 +1,45 @@
 # MiniPaaS
 
-**Plataforma PaaS ligera y autohospedada para desplegar y gestionar aplicaciones en contenedores
-desde un panel web.**
+**Plataforma web ligera y autohospedada para monitorizar un servidor y sus contenedores Docker, en
+solo lectura.**
 
 Trabajo de la asignatura *Gestión de Sistemas de Archivos y Servicios Distribuidos* (GSASD).
-Título provisional: *«Diseño e implementación de una plataforma PaaS ligera para el despliegue y
-gestión de aplicaciones distribuidas»*.
 
-> **Estado actual: Fase 2 (persistencia, aplicaciones, autenticación y auditoría) terminada,
-> pendiente de aprobación.** El panel tiene inicio de sesión de un único administrador y permite
-> registrar, consultar, editar y eliminar aplicaciones, que se guardan en SQLite. **Todavía no se
-> pueden desplegar aplicaciones** (empieza en la Fase 3); las capacidades descritas abajo son
-> objetivos de las fases siguientes.
+> **Estado actual: renovación a plataforma de monitorización terminada, pendiente de aprobación**
+> (rama `renovacion-monitorizacion`). El proyecto empezó como una PaaS para desplegar aplicaciones
+> (Fases 0 a 3); el 2026-11-16 se cambió el objetivo a monitorización de solo lectura por ser más
+> sencillo, seguro y defendible (ADR-036). Las Fases 0 a 2 se conservan como etapa anterior; la
+> Fase 3 está en la rama `fase-03-motor-despliegue`, que no se aprobó y se conserva intacta. Informe:
+> [docs/informes/renovacion-monitorizacion.md](docs/informes/renovacion-monitorizacion.md). El nombre
+> «MiniPaaS» y el paquete `minipaas` se mantienen por historia.
 
 ## ¿Qué es?
 
-MiniPaaS permite a una persona desplegar, configurar, monitorizar y administrar aplicaciones en un
-servidor doméstico sin tener que usar Docker desde la terminal. El usuario trabaja con
-**aplicaciones y despliegues**; la plataforma se encarga de los contenedores, redes, volúmenes y
-límites de recursos.
+Un panel web, protegido con una contraseña, que muestra:
 
-Capacidades objetivo: desplegar desde una imagen o una plantilla, variables de entorno y secretos,
-puertos, almacenamiento persistente, redes privadas por aplicación, logs, health checks, métricas,
-límites de recursos, historial de despliegues y vuelta atrás a una versión anterior de la aplicación
-(la vuelta atrás no revierte los datos persistentes).
+- **El servidor anfitrión:** CPU, RAM, disco, sistema operativo, kernel, *hostname*, tiempo en marcha
+  y temperaturas.
+- **Los contenedores Docker en ejecución:** nombre, imagen, estado, puertos, fecha de creación y
+  proyecto/servicio de Compose, incluidos los creados fuera de la plataforma.
+
+Se actualiza solo cada 5 segundos. **No puede crear, iniciar, parar, borrar ni modificar**
+contenedores, imágenes ni volúmenes.
 
 ## Arquitectura en una frase
 
-Un **control plane** sin privilegios (FastAPI + SQLite + panel web) decide *qué* hay que hacer, y un
-**agente** aislado, el único con acceso a Docker, ejecuta solo una lista cerrada de operaciones
-seguras sobre recursos que pertenecen a MiniPaaS. Detalles en
+Un **panel** sin acceso a Docker (FastAPI + web estática) pide los datos a un **agente** interno, el
+único con el socket de Docker, que solo hace consultas de lectura y lee `/proc`, `/sys` y el `/` del
+anfitrión montado en solo lectura. Sin base de datos. Detalles en
 [docs/03-arquitectura.md](docs/03-arquitectura.md).
 
-## Tecnologías previstas
+```text
+Navegador ──▶ Panel (sin socket) ──token──▶ Agente (solo lectura) ──▶ Docker, /proc, /sys, /hostfs
+```
 
-Python · FastAPI · Pydantic · SQLite · Docker Engine (SDK de Python) · Docker Compose ·
-HTML/CSS/JavaScript · Chart.js. Justificación en [docs/decisiones.md](docs/decisiones.md).
+## Tecnologías
+
+Python 3.12 · FastAPI · httpx · argon2-cffi · SDK de Docker · Docker Compose · HTML/CSS/JavaScript
+sin framework. Justificación en [docs/decisiones.md](docs/decisiones.md).
 
 ## Documentación
 
@@ -46,22 +50,22 @@ HTML/CSS/JavaScript · Chart.js. Justificación en [docs/decisiones.md](docs/dec
 Requisitos: Linux, Docker Engine con Compose y [uv](https://docs.astral.sh/uv/).
 
 ```bash
-uv sync --all-extras && uv run pytest -m "not integration"   # tests
+uv sync --all-extras && uv run pytest -q             # tests (48)
 bash scripts/prepare_dev_env.sh                      # token y GID de Docker (una vez)
 docker compose --env-file deploy/.env -f deploy/compose.dev.yaml up -d --build --wait
 docker compose --env-file deploy/.env -f deploy/compose.dev.yaml \
-    exec controlplane python -m minipaas.controlplane.manage create-admin --username admin
+    exec controlplane python -m minipaas.controlplane.manage set-password
 ```
 
-Panel: <http://127.0.0.1:8000>. No hay credenciales por defecto: el administrador se crea con la
-última orden, que pide la contraseña sin mostrarla. La API está descrita en [docs/api.md](docs/api.md). Detalles y verificación del aislamiento en
-[docs/guia-desarrollo.md](docs/guia-desarrollo.md). La instalación en el servidor se documentará en
-la Fase 13.
+Panel: <http://127.0.0.1:8000>. No hay contraseña por defecto: se establece con la última orden
+(4 a 128 caracteres). La API está descrita en [docs/api.md](docs/api.md); la guía completa y las
+pruebas extremo a extremo, en [docs/guia-desarrollo.md](docs/guia-desarrollo.md). Todavía **no se ha
+probado en el servidor Ubuntu real**; su instalación requiere autorización expresa.
 
 ## Seguridad
 
-La plataforma no usa contenedores privilegiados, no da acceso al socket de Docker al componente
-expuesto a la red, no permite ejecutar comandos arbitrarios y solo actúa sobre recursos etiquetados
-como propios. El panel exige sesión (contraseñas con Argon2id, sesiones revocables en servidor,
-protección CSRF, límite de intentos) y registra las operaciones en un log de auditoría. Ver
-[docs/04-seguridad.md](docs/04-seguridad.md).
+El panel no tiene el socket de Docker; el agente (único con el socket) está en una red interna sin
+puertos, exige un token y solo hace consultas de lectura. Ningún contenedor es privilegiado ni root.
+La contraseña se guarda con Argon2id; hay límite de intentos, cookie `HttpOnly`/`SameSite=Strict`,
+CSRF, CSP y sesiones con caducidad. Limitaciones conocidas (el socket de Docker sigue dando acceso
+equivalente a root al agente, sesiones en memoria...) en [docs/04-seguridad.md](docs/04-seguridad.md).

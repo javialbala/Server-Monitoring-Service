@@ -1,95 +1,92 @@
 # 1. Visión y alcance
 
-> Estado del documento: **aprobado por el equipo (2026-11-15)** con los matices de `decisiones.md`.
+> Estado del documento: **reescrito en la renovación (2026-11-16)**, con el cambio de objetivo
+> aprobado por el usuario (ADR-036). El objetivo original (PaaS) se conserva en el apartado 1.7 como
+> historia del proyecto.
 
 ## 1.1 Problema
 
-Un servidor doméstico con Docker permite ejecutar aplicaciones, pero gestionarlas exige conocer
-comandos (`docker run`, `docker compose`, redes, volúmenes, límites…) y recordar cómo se desplegó
-cada una. No existe una visión centralizada del estado de las aplicaciones ni un historial de
-despliegues, y un error manual puede afectar a servicios que ya están funcionando.
+Un servidor doméstico con Docker ejecuta servicios que se crean de formas distintas (`docker run`,
+Compose, otras herramientas). Para saber si el servidor está sano hay que entrar por terminal y usar
+varios comandos (`top`, `free`, `df`, `docker ps`...). No hay una vista única y sencilla con el
+estado del servidor y de todos sus contenedores.
 
 ## 1.2 Objetivo
 
-Diseñar e implementar **MiniPaaS**, una plataforma como servicio (PaaS) ligera y autohospedada que:
+Construir una **plataforma web ligera de monitorización y consulta** (el proyecto sigue llamándose
+MiniPaaS por razones históricas) que muestre, tras iniciar sesión:
 
-- ofrezca un **panel web** desde el que desplegar y administrar aplicaciones sin usar la terminal;
-- trabaje con el concepto de **aplicación y despliegue**, no con contenedores sueltos;
-- use **Docker Engine** como runtime subyacente, ocultando sus detalles al usuario;
-- sea **segura por diseño**: el componente con privilegios está aislado y solo acepta operaciones
-  permitidas;
-- funcione en un **servidor doméstico con recursos limitados** sin interferir con los servicios
-  existentes.
+1. **Métricas del servidor anfitrión:** CPU, RAM, disco, sistema operativo, kernel, *hostname*,
+   tiempo en marcha (*uptime*) y temperaturas.
+2. **Contenedores Docker en ejecución:** nombre, imagen, estado, puertos, fecha de creación y
+   proyecto/servicio de Docker Compose, **incluidos los creados fuera de la plataforma**.
 
-Título provisional del trabajo: *«Diseño e implementación de una plataforma PaaS ligera para el
-despliegue y gestión de aplicaciones distribuidas»*.
+La plataforma es **solo de lectura**: no crea, inicia, para, borra ni modifica contenedores, imágenes
+ni volúmenes. Debe ser **funcional, sencilla y segura**, y su código debe poder ser comprendido,
+explicado y demostrado por el equipo.
 
-## 1.3 Qué es «aplicación» en MiniPaaS
+## 1.3 Motivo del cambio de objetivo
 
-Una **aplicación** es una unidad lógica con nombre que el usuario gestiona como un todo. Está
-formada por uno o varios **servicios** (por ejemplo, `web` + `redis`). Cada servicio se ejecuta como
-un contenedor creado a partir de una imagen. Los servicios de una misma aplicación se comunican
-por una **red privada propia** de la aplicación, resolviéndose por nombre; las aplicaciones están
-aisladas entre sí. Esto es lo que justifica el término *aplicaciones distribuidas* del título.
-
-Un **despliegue** es una versión concreta de la configuración de la aplicación (imágenes, variables,
-puertos, volúmenes, límites). Cada cambio genera un nuevo despliegue numerado, lo que permite
-consultar el historial y volver a una versión anterior.
+El objetivo original era una PaaS completa (catálogo, despliegues, revisiones, *rollback*,
+volúmenes, redes, límites). Era demasiado amplio y complejo para un proyecto universitario que el
+equipo debe entender y defender: la Fase 3 sola ya tenía unas 7 700 líneas de código y faltaban
+diez fases. El 2026-11-16 el usuario aprobó reducirlo a monitorización de solo lectura (ADR-036),
+priorizando lo funcional, lo sencillo y lo seguro.
 
 ## 1.4 Alcance
 
-### Dentro del alcance (objetivo del proyecto)
+### Dentro del alcance
 
 | Área | Incluido |
 |---|---|
-| Aplicaciones | Crear, listar, consultar, editar, eliminar |
-| Despliegue | Desde imagen de un registro público y desde plantillas propias predefinidas |
-| Ciclo de vida | Iniciar, detener, reiniciar, redesplegar, volver a la **versión de la aplicación** de un despliegue anterior (no a sus datos, ver ADR-011) |
-| Configuración | Variables de entorno (con valores secretos ocultos en la interfaz), puertos |
-| Almacenamiento | Volúmenes persistentes con nombre, que sobreviven a los redespliegues |
-| Redes | Red privada por aplicación; exposición controlada de puertos al exterior |
-| Recursos | Límites de CPU y memoria por servicio; política de reinicio |
-| Monitorización | Estado, salud (health checks), consumo de CPU/memoria, logs, métricas del host |
-| Seguridad | Autenticación, validación de entradas, agente privilegiado aislado, registro de auditoría |
-| Interfaz | Panel web sencillo, coherente y comprensible para alguien que no conoce Docker |
+| Acceso | Inicio de sesión con una contraseña única, cierre de sesión, caducidad de sesión |
+| Métricas del anfitrión | CPU (%, núcleos, modelo), RAM, disco raíz, SO, kernel, arquitectura, *hostname*, uptime, temperaturas |
+| Contenedores | Lista de los **en ejecución**: nombre, imagen, estado, puertos, creación, proyecto y servicio de Compose |
+| Actualización | Consulta automática cada 5 s, con pausa si la pestaña no está visible |
+| Seguridad | Agente de solo lectura aislado, token, Argon2id, límite de intentos, CSRF, CSP |
 
 ### Fuera del alcance (decisión consciente)
 
 | Excluido | Motivo |
 |---|---|
-| Construir imágenes desde código fuente o Git (*buildpacks*) | Coste de CPU/disco alto en el servidor y superficie de ataque amplia. Posible extensión opcional. |
-| Ficheros `docker-compose.yml` arbitrarios subidos por el usuario | Permitirían `privileged`, montajes del host, etc. Se usan plantillas propias validadas. |
-| Multi-nodo, clúster, planificación entre máquinas | Hardware de un solo servidor. Se discute como limitación y trabajo futuro. |
-| Autoescalado horizontal | Sin varios nodos no aporta valor real; se puede discutir conceptualmente. |
-| Multi-inquilino con aislamiento fuerte entre usuarios | Un servidor doméstico tiene uno o pocos administradores. |
-| Varios usuarios y roles (p. ej. solo lectura) | Se empieza con un único administrador (ADR-010). |
-| *Rollback* de datos persistentes (instantáneas de volúmenes) | No hay mecanismo real para ello; el *rollback* recupera la versión de la aplicación, no sus datos (ADR-011). |
-| Kubernetes, OpenStack, Proxmox | Peso excesivo para el hardware y el alcance (ver `decisiones.md`, ADR-001). |
-| Certificados TLS públicos automáticos | Depende de un dominio público; se valorará en la fase de despliegue final. |
+| Crear, iniciar, parar, reiniciar o borrar contenedores, imágenes y volúmenes | Es el núcleo del cambio de objetivo: solo lectura. |
+| Desplegar aplicaciones, plantillas, revisiones, *rollback* | Eran el objetivo PaaS (Fases 3 a 9 originales). |
+| Contenedores parados o historial de métricas | No pedido; el panel muestra el estado actual. |
+| Red del anfitrión (tráfico, interfaces) | Requeriría `network_mode: host` para el agente, que se evita (ver problemas pendientes). |
+| Logs de contenedores, alertas, notificaciones | No pedido. |
+| Varios usuarios y roles | Una única contraseña. |
+| Multi-nodo, Kubernetes | Un solo servidor. |
+| HTTPS propio | Se podrá poner delante un proxy; `MINIPAAS_COOKIE_SECURE=true` ya está disponible. |
 
 ### Criterio de éxito
 
-Ver el apartado 15 del enunciado del proyecto: una plataforma que funcione, estable y segura dentro
-de su alcance, ejecutable en el servidor doméstico, con interfaz sencilla, arquitectura coherente,
-código legible y documentación suficiente para defenderla académicamente.
+Una plataforma que funcione, sea estable y segura dentro de su alcance, ejecutable en el servidor
+doméstico, con interfaz sencilla, arquitectura coherente, código legible y documentación suficiente
+para defenderla académicamente.
 
 ## 1.5 Restricciones
 
-- **No poner en riesgo el servidor real.** Todo el desarrollo y las pruebas se hacen en local. La
-  plataforma solo puede actuar sobre recursos Docker que ella misma ha creado (marcados con la
-  etiqueta `minipaas.managed=true`).
-- **Recursos limitados.** Objetivo de diseño: los componentes propios de MiniPaaS deberían consumir
-  menos de ~250 MB de RAM en reposo. Es un objetivo, no un resultado, hasta que se mida (RNF-07).
-- **Tecnologías comprensibles.** Cada pieza debe poder explicarse en la defensa.
-- **Proyecto académico de duración limitada.** Se prioriza un núcleo sólido frente a muchas
-  funcionalidades a medias.
+- **No poner en riesgo el servidor real.** Todo el desarrollo y las pruebas se hacen en local. A
+  fecha de esta renovación **no** se ha probado en el servidor Ubuntu real.
+- **Solo lectura**, también en el código: el agente únicamente consulta (ADR-037).
+- **Recursos limitados.** Objetivo de diseño de bajo consumo (RNF-07), todavía sin medir.
+- **Tecnologías comprensibles.** Cada pieza debe poder explicarse en la defensa; sin dependencias
+  nuevas respecto a la Fase 2.
+- **Proyecto académico de duración limitada.** Se prioriza un núcleo pequeño y sólido.
 
 ## 1.6 Usuarios
 
 | Rol | Descripción |
 |---|---|
-| Administrador | Persona que gestiona el servidor y despliega aplicaciones. **Único usuario del panel** (ADR-010). |
-| Visitante de una aplicación | Accede a la aplicación desplegada (no al panel). No interactúa con MiniPaaS. |
+| Administrador | Persona que consulta el estado del servidor. Es el **único usuario**: comparte una contraseña única. |
 
-Decisión aprobada: se empieza con un único usuario administrador; otros roles quedan fuera del
-alcance inicial (ver `decisiones.md`, ADR-010).
+## 1.7 Historia: el objetivo original (Fases 0 a 3)
+
+Hasta la Fase 2 el proyecto se planteaba como una **PaaS ligera** autohospedada para desplegar y
+administrar aplicaciones en contenedores (título provisional: *«Diseño e implementación de una
+plataforma PaaS ligera para el despliegue y gestión de aplicaciones distribuidas»*). Las Fases 0 a 2
+(análisis, estructura y entorno, control plane con SQLite y autenticación) fueron aprobadas y **se conservan**: la renovación reutiliza su estructura de dos procesos,
+la autenticación, el CSRF, las cabeceras, el entorno Docker y la integración continua. La Fase 3
+(motor de despliegue) se desarrolló en la rama `fase-03-motor-despliegue`, que se conserva intacta
+pero no se aprobó. Los informes `docs/informes/fase-00.md` a `fase-02.md` describen esa etapa.
+El informe de la renovación es `docs/informes/renovacion-monitorizacion.md`.

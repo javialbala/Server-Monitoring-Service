@@ -12,29 +12,41 @@ Estados posibles:
 | ADR | Tema | Estado |
 |---|---|---|
 | 001 | Runtime: Docker Engine en un solo nodo | Aceptada |
-| 002 | Acceso a Docker mediante un agente propio que construye la configuración | **Aceptada con matices** (2026-11-15) |
+| 002 | Acceso a Docker mediante un agente propio que construye la configuración | **Sustituida en parte por ADR-037** (el agente ya no crea nada) |
 | 003 | Integración con Docker mediante el SDK oficial de Python | Aceptada |
 | 004 | Backend en Python con FastAPI | Aceptada |
-| 005 | SQLite con el módulo estándar `sqlite3` | Aceptada |
+| 005 | SQLite con el módulo estándar `sqlite3` | **Sustituida por ADR-039** |
 | 006 | Panel en HTML/CSS/JS sin framework ni compilación | Aceptada |
-| 007 | Aplicaciones multi-servicio con red privada por aplicación | **Aceptada** (2026-11-15) |
-| 008 | Acceso a las aplicaciones: rango de puertos y proxy inverso opcional | **Aceptada** (2026-11-15) |
-| 009 | Fuentes de despliegue: imágenes y plantillas propias | **Aceptada** (2026-11-15) |
-| 010 | Autenticación con un único administrador y sesiones en servidor | **Aceptada con matices** (2026-11-15) |
-| 011 | Despliegue *recreate* con restauración; *rollback* de aplicación, no de datos | Aceptada (matizada el 2026-11-15) |
-| 012 | Ejecución en segundo plano con un *worker* `asyncio` interno | Aceptada |
+| 007 | Aplicaciones multi-servicio con red privada por aplicación | **Sustituida por ADR-036** (sin aplicaciones) |
+| 008 | Acceso a las aplicaciones: rango de puertos y proxy inverso opcional | **Sustituida por ADR-036** (sin aplicaciones) |
+| 009 | Fuentes de despliegue: imágenes y plantillas propias | **Sustituida por ADR-036** (sin despliegues) |
+| 010 | Autenticación con un único administrador y sesiones en servidor | **Sustituida en parte por ADR-039** (contraseña única, sesiones en memoria) |
+| 011 | Despliegue *recreate* con restauración; *rollback* de aplicación, no de datos | **Sustituida por ADR-036** (sin despliegues) |
+| 012 | Ejecución en segundo plano con un *worker* `asyncio` interno | **Sustituida por ADR-036** (sin despliegues) |
 | 013 | `uv` y `uv.lock` en desarrollo, CI e imágenes (exportado con hashes) | Aceptada (Fase 1, revisada) |
 | 014 | Token compartido como *secret* de archivo: una copia 600 por componente | Aceptada (Fase 1, revisada) |
 | 015 | Python 3.12 en imágenes y CI | Aceptada (Fase 1) |
-| 016 | Migraciones propias: archivos SQL numerados y tabla de versiones | Aceptada (Fase 2) |
-| 017 | Conexiones SQLite por petición, transacciones explícitas y WAL | Aceptada (Fase 2) |
-| 018 | Sesiones en servidor con el identificador guardado como hash | Aceptada (Fase 2) |
+| 016 | Migraciones propias: archivos SQL numerados y tabla de versiones | **Sustituida por ADR-039** |
+| 017 | Conexiones SQLite por petición, transacciones explícitas y WAL | **Sustituida por ADR-039** |
+| 018 | Sesiones en servidor con el identificador guardado como hash | **Sustituida en parte por ADR-039** (sesiones en memoria; se conserva el hash) |
 | 019 | Argon2id (argon2-cffi) para las contraseñas | Aceptada (Fase 2) |
-| 020 | Administrador inicial creado por CLI explícita e idempotente | Aceptada (Fase 2) |
+| 020 | Administrador inicial creado por CLI explícita e idempotente | **Sustituida por ADR-039** (`set-password`) |
 | 021 | CSRF con token sincronizador por sesión + comprobación de `Origin` | Aceptada (Fase 2) |
-| 022 | Auditoría transaccional con metadatos filtrados | Aceptada (Fase 2) |
-| 023 | Estado lógico de la aplicación en tabla de códigos; slug inmutable; borrado definitivo | Aceptada (Fase 2) |
-| 024 | Limitación de intentos de login en memoria | Aceptada (Fase 2) |
+| 022 | Auditoría transaccional con metadatos filtrados | **Sustituida por ADR-039** (log en lugar de BD) |
+| 023 | Estado lógico de la aplicación en tabla de códigos; slug inmutable; borrado definitivo | **Sustituida por ADR-036** (sin aplicaciones) |
+| 024 | Limitación de intentos de login en memoria | Aceptada (Fase 2); se mantiene, solo por IP |
+| 025–035 | Motor de despliegue (Fase 3, rama `fase-03-motor-despliegue`) | **No aprobadas; sustituidas por ADR-036** (ver nota) |
+| 036 | Cambio de objetivo: plataforma de monitorización de solo lectura | Aceptada (Renovación) |
+| 037 | Agente separado y de solo lectura; el socket `:ro` no limita la API | Aceptada (Renovación) |
+| 038 | Montaje del `/` del anfitrión en `/hostfs`, solo lectura y sin submontajes | Aceptada (Renovación) |
+| 039 | Sin SQLite: hash de la contraseña en un archivo y sesiones en memoria | Aceptada (Renovación) |
+| 040 | Métricas con la biblioteca estándar, sin `psutil` | Aceptada (Renovación) |
+| 041 | Consulta HTTP periódica con pausa en pestaña oculta, sin WebSockets | Aceptada (Renovación) |
+
+> **Nota sobre ADR-025 a ADR-035.** Pertenecen a la Fase 3 (motor de despliegue). Solo existen en la
+> rama `fase-03-motor-despliegue`, que se conserva intacta pero **no fue aprobada**; la renovación
+> parte de la Fase 2 (`main`) y no las incluye. Quedan sustituidas por ADR-036: el objetivo ya no
+> incluye desplegar nada. En esta rama no hay texto de esas ADR y los números no se reutilizan.
 
 ### Historial de aprobaciones
 
@@ -64,6 +76,8 @@ sobre Docker es precisamente el valor académico del proyecto.
 el agente habla la API de Docker, Podman podría usarse en el futuro con cambios mínimos.
 
 ## ADR-002 · Acceso a Docker mediante un agente propio que construye la configuración
+
+> **Sustituida en parte por ADR-037 (2026-11-16).** Se mantiene la idea de separar el agente (único con el socket) del panel; deja de aplicar todo lo relativo a crear contenedores, la `ServiceRequest`, la lista blanca de escritura y la etiqueta `minipaas.managed`: el agente ya no crea ni modifica nada.
 
 **Estado:** Aceptada con matices (2026-11-15).
 
@@ -135,6 +149,8 @@ necesitamos; Go sería más eficiente pero menos accesible para el equipo.
 
 ## ADR-005 · SQLite con el módulo estándar `sqlite3`
 
+> **Sustituida por ADR-039 (2026-11-16).** La renovación elimina SQLite por completo.
+
 **Alternativas.** SQLAlchemy/SQLModel (ORM), PostgreSQL.
 
 **Decisión.** SQLite (modo WAL) con SQL explícito en un módulo de repositorios y migraciones
@@ -162,6 +178,8 @@ cliente de API común.
 
 ## ADR-007 · Aplicaciones multi-servicio con red privada por aplicación
 
+> **Sustituida por ADR-036 (2026-11-16).** Ya no hay aplicaciones ni redes por aplicación.
+
 **Contexto.** El título habla de *aplicaciones distribuidas*. Muchas aplicaciones reales necesitan
 varios procesos (web + base de datos).
 
@@ -179,6 +197,8 @@ red, que son temas centrales de la asignatura.
 
 ## ADR-008 · Acceso a las aplicaciones: rango de puertos y proxy inverso opcional
 
+> **Sustituida por ADR-036 (2026-11-16).** Ya no se publican puertos de aplicaciones.
+
 **Alternativas.**
 
 | Opción | Ventajas | Inconvenientes |
@@ -195,6 +215,8 @@ saber si ya hay algo escuchando en 80/443.
 
 ## ADR-009 · Fuentes de despliegue: imágenes y plantillas propias
 
+> **Sustituida por ADR-036 (2026-11-16).** Ya no se despliega nada desde imágenes ni plantillas.
+
 **Alternativas.** Imágenes de registro; plantillas propias validadas; ficheros Compose subidos por el
 usuario; construcción desde código/Git (*buildpacks* o Dockerfile).
 
@@ -206,6 +228,8 @@ construcción desde código (coste de CPU/disco y superficie de ataque), que que
 opcional.
 
 ## ADR-010 · Autenticación con un único administrador y sesiones en servidor
+
+> **Sustituida en parte por ADR-039 (2026-11-16).** Se mantienen la sesión en servidor, la cookie `HttpOnly`/`SameSite=Strict`, el CSRF y la limitación de intentos; ahora hay una contraseña única (sin usuario), el hash va en un archivo y las sesiones viven en memoria.
 
 **Estado:** Aceptada con matices (2026-11-15).
 
@@ -225,6 +249,8 @@ lectura) quedan fuera del alcance inicial. Aun así, la tabla de usuarios y el r
 guardan el nombre de usuario, de modo que añadir más usuarios en el futuro no obligue a rediseñar.
 
 ## ADR-011 · Despliegue *recreate* con restauración; *rollback* de aplicación, no de datos
+
+> **Sustituida por ADR-036 (2026-11-16).** Ya no hay despliegues ni *rollback*.
 
 **Contexto.** Con puertos fijos del host, la versión nueva y la vieja no pueden escuchar a la vez.
 
@@ -252,6 +278,8 @@ Consecuencias que deben comunicarse al usuario (en la interfaz y en la documenta
 Con el proxy inverso de la ADR-008 se podría evolucionar a *blue-green*.
 
 ## ADR-012 · Ejecución en segundo plano con un *worker* `asyncio` interno
+
+> **Sustituida por ADR-036 (2026-11-16).** Sin despliegues no hay trabajos en segundo plano.
 
 **Alternativas.** Celery + Redis; RQ; ejecución síncrona en la petición HTTP; *worker* interno.
 
@@ -336,6 +364,8 @@ todas las dependencias. Lo que se prueba es lo que se ejecuta.
 
 ## ADR-016 · Migraciones propias: archivos SQL numerados y tabla de versiones
 
+> **Sustituida por ADR-039 (2026-11-16).** Sin base de datos no hay migraciones.
+
 **Problema.** El esquema de SQLite debe crearse de forma reproducible, evolucionar entre fases y
 permitir saber qué versión está instalada.
 
@@ -357,6 +387,8 @@ vuelta atrás del código). Las migraciones se aplican al arrancar el control pl
 
 ## ADR-017 · Conexiones SQLite por petición, transacciones explícitas y WAL
 
+> **Sustituida por ADR-039 (2026-11-16).** Sin base de datos no hay conexiones ni transacciones.
+
 **Problema.** Varias peticiones simultáneas (y la CLI) usan el mismo archivo sin corromperlo ni
 bloquearse indefinidamente.
 
@@ -376,6 +408,8 @@ de conexiones (innecesario a esta escala); `executescript`/transacciones implíc
 menos evidente).
 
 ## ADR-018 · Sesiones en servidor con el identificador guardado como hash
+
+> **Sustituida en parte por ADR-039 (2026-11-16).** Se conserva guardar solo el SHA-256 del identificador; las sesiones ya no están en SQLite sino en memoria.
 
 **Problema.** Mantener la sesión del administrador de forma revocable y sin que una copia de la base
 de datos permita suplantarlo.
@@ -410,6 +444,8 @@ existencia por el tiempo de respuesta.
 un único administrador y con el limitador de intentos (ADR-024).
 
 ## ADR-020 · Administrador inicial creado por CLI explícita e idempotente
+
+> **Sustituida por ADR-039 (2026-11-16).** Ya no hay administrador con usuario: la orden es `manage set-password`.
 
 **Problema.** Crear el primer administrador sin contraseñas por defecto, sin credenciales en el código
 y sin exponer la contraseña.
@@ -448,6 +484,8 @@ Una web ajena no puede leer el token porque no hay cabeceras CORS que lo permita
 
 ## ADR-022 · Auditoría transaccional con metadatos filtrados
 
+> **Sustituida por ADR-039 (2026-11-16).** No hay tabla de auditoría; los accesos se registran con `logging` (logger `minipaas.access`).
+
 **Problema.** Registrar las operaciones relevantes sin almacenar secretos y sin que una operación
 fallida deje un registro de éxito.
 
@@ -467,6 +505,8 @@ fallida deje un registro de éxito.
 
 ## ADR-023 · Estado lógico en tabla de códigos; slug inmutable; borrado definitivo
 
+> **Sustituida por ADR-036 (2026-11-16).** Ya no existen aplicaciones, estados lógicos ni slugs.
+
 **Estado lógico.** En esta fase una aplicación solo puede estar **registrada sin desplegar**
 (`draft`). No se inventan estados de ejecución: los estados del ciclo de vida se añadirán cuando
 existan los despliegues (Fase 3–4). Se guarda como clave foránea a `application_statuses` en lugar de
@@ -484,6 +524,8 @@ contenedores y volúmenes (relacionado con RF-19).
 
 ## ADR-024 · Limitación de intentos de login en memoria
 
+> **Se mantiene (2026-11-16)** con un cambio: al no haber nombre de usuario, el límite es solo por IP.
+
 **Problema.** Impedir la fuerza bruta contra el formulario de acceso.
 
 **Decisión.** Ventana deslizante en memoria: tras 5 fallos en 15 minutos, por IP **o** por nombre de
@@ -496,3 +538,136 @@ externo (fail2ban, etc.; fuera del alcance).
 **Limitaciones aceptadas.** El contador se pierde al reiniciar el control plane (el atacante no puede
 provocar ese reinicio) y solo es válido con un único proceso de uvicorn, que es la configuración del
 proyecto. Detrás de un proxy inverso habrá que tomar la IP real de una cabecera de confianza.
+
+---
+
+# Renovación a plataforma de monitorización (2026-11-16)
+
+Las ADR 036 a 041 se aprobaron con el cambio de objetivo. Las ADR 025 a 035 (Fase 3) no forman parte
+de esta rama.
+
+## ADR-036 · Cambio de objetivo: plataforma de monitorización de solo lectura
+
+**Estado:** Aceptada (2026-11-16, decisión del usuario).
+
+**Contexto.** El objetivo original era una PaaS: catálogo, despliegues, revisiones, *rollback*,
+volúmenes, redes y límites. La Fase 3 (motor de despliegue) ya sumaba unas 7 700 líneas de código
+fuente y 4 500 de pruebas, y seguían faltando diez fases. Era demasiado amplio y complejo para un
+proyecto universitario que el equipo debe comprender, explicar y demostrar.
+
+**Alternativas.** (a) Seguir con la PaaS completa, con riesgo alto de no terminar o de no poder
+explicarla. (b) Recortar la PaaS a «solo desplegar una imagen». (c) Cambiar a una plataforma que
+solo **consulta**.
+
+**Decisión.** Opción (c): una plataforma web ligera de **monitorización y consulta** que muestra las
+métricas del servidor anfitrión (CPU, RAM, disco, SO, kernel, hostname, uptime, temperaturas) y los
+contenedores Docker **en ejecución** (nombre, imagen, estado, puertos, fecha de creación, proyecto y
+servicio de Compose), incluidos los creados fuera de la plataforma. **Está prohibido** crear,
+iniciar, parar, borrar o modificar contenedores, imágenes o volúmenes. La rama de trabajo se crea
+desde `main` (Fase 2, la última aprobada), no desde la Fase 3. Se conservan las Fases 0 a 2 como
+base; la Fase 3 queda como rama sin aprobar.
+
+**Consecuencias.** Código mucho más pequeño (ver el informe de la renovación: de 2 967 a 1 492 líneas
+de código fuente respecto a la Fase 2). Se pierde toda la gestión de aplicaciones. Ganan la
+seguridad (superficie de ataque muy menor) y la capacidad del equipo para defender cada línea.
+
+## ADR-037 · Agente separado y de solo lectura; el socket `:ro` no limita la API
+
+**Estado:** Aceptada (2026-11-16).
+
+**Contexto.** Hay que leer la lista de contenedores de Docker, y acceder al socket de Docker equivale
+a tener root en el anfitrión. El panel está expuesto al navegador.
+
+**Alternativas.** (a) Un solo proceso con el socket: si se compromete el panel, el atacante tiene el
+equivalente a root. (b) Mantener dos procesos: panel sin socket y agente interno con socket y solo
+consultas.
+
+**Decisión.** Opción (b). El **panel** (`minipaas.controlplane`) no tiene el socket, corre sin root,
+con `read_only`, `cap_drop: ALL` y `no-new-privileges`. El **agente** (`minipaas.agent`) está en una
+red interna sin puertos publicados, exige un token Bearer en todas las rutas, solo ofrece rutas
+`GET` y solo hace dos consultas a Docker: `containers(status=running)` y `version`. No ejecuta
+comandos, no es privilegiado y no tiene documentación OpenAPI.
+
+**Matiz importante.** Montar el socket con `:ro` **no** hace la API de solo lectura: `:ro` solo
+afecta al archivo del socket en el sistema de archivos, no a las peticiones HTTP que se envían por él:
+crear un contenedor privilegiado, por ejemplo, seguiría funcionando. Por eso no se usa `:ro` como si fuera una
+protección. La garantía de solo lectura está **en el código del agente** (y se comprueba con pruebas
+y con la observación de `docker events`), no en Docker.
+
+**Consecuencias.** Un fallo en el código del agente seguiría dando acceso total a Docker. Mejora
+posible, no adoptada (añadiría una dependencia o un componente nuevo): un *proxy* del socket que solo
+deje pasar las rutas de lectura.
+
+## ADR-038 · Montaje del `/` del anfitrión en `/hostfs`, solo lectura y sin submontajes
+
+**Estado:** Aceptada (2026-11-16).
+
+**Contexto.** El agente corre en un contenedor, así que `statvfs("/")` mediría el sistema de archivos
+del contenedor y no el disco del anfitrión; además necesita el nombre del SO y el *hostname* reales.
+`/proc` y `/sys` ya muestran CPU, RAM, uptime y temperaturas del anfitrión.
+
+**Alternativas.** (a) No montar nada y medir el disco que usa Docker: podía no coincidir con el disco
+raíz. (b) Montar el `/` del anfitrión en `/hostfs` en solo lectura, como `node_exporter`, pero sin
+submontajes.
+
+**Decisión.** Opción (b): `type: bind`, `read_only: true` y `bind: recursive: disabled`. Sin
+recursividad, `/hostfs` no incluye `/proc`, `/sys`, `/home` ni otros discos montados. Solo se usa
+para `statvfs` (disco raíz), `/etc/os-release` y `/etc/hostname`. El proceso del agente no es root:
+solo lee lo que cualquier usuario puede leer.
+
+**Consecuencias.** El agente ve el árbol raíz del anfitrión en solo lectura. Se verifica en la
+prueba extremo a extremo (no puede escribir en `/hostfs` y `/hostfs/proc` está vacío). La regla del
+proyecto prohíbe montar `/` del host **con escritura**; este montaje es de solo lectura y no
+recursivo, y queda documentado como excepción consciente.
+
+## ADR-039 · Sin SQLite: hash de la contraseña en un archivo y sesiones en memoria
+
+**Estado:** Aceptada (2026-11-16). Sustituye a ADR-005, 016, 017, 020 y 022, y en parte a ADR-010 y
+ADR-018.
+
+**Contexto.** Sin aplicaciones ni auditoría en base de datos, lo único que había que guardar era la
+contraseña.
+
+**Alternativas.** (a) Mantener SQLite solo para una fila. (b) Guardar el hash Argon2id en un archivo.
+(c) Variable de entorno con la contraseña (queda en `docker inspect`).
+
+**Decisión.** Opción (b). El hash está en `/data/password_hash` (volumen de Docker) y se crea con
+`python -m minipaas.controlplane.manage set-password` (`--stdin` para scripts). Contraseña única, de
+4 a 128 caracteres, sin usuario. Las sesiones viven en la memoria del proceso: se pierden al
+reiniciar el panel (hay que volver a entrar). Los accesos se registran con `logging`
+(`minipaas.access`) sin contraseñas.
+
+**Consecuencias.** Se eliminan migraciones, repositorios y transacciones. Limitaciones aceptadas:
+sesiones y limitador solo valen para un proceso de uvicorn; la longitud mínima de 4 caracteres es
+una decisión del equipo (menos de lo recomendable) que el límite de intentos y Argon2id compensan en
+parte.
+
+## ADR-040 · Métricas con la biblioteca estándar, sin `psutil`
+
+**Estado:** Aceptada (2026-11-16).
+
+**Alternativas.** (a) `psutil`: cómodo, pero una dependencia más (con parte compilada) para leer
+cuatro archivos. (b) Leer `/proc` y `/sys` con Python estándar.
+
+**Decisión.** Opción (b): CPU por diferencia de dos lecturas de `/proc/stat` separadas 0,5 s
+(`idle + iowait` frente al total); RAM: `usada = MemTotal − MemAvailable`; disco con `os.statvfs`
+calculado como `df`; temperaturas de `/sys/class/thermal`. Las funciones reciben las rutas como
+parámetro para probarlas con directorios falsos.
+
+**Consecuencias.** Sin dependencias nuevas; el cálculo se puede explicar fórmula a fórmula. Cada
+consulta de `/metrics` tarda unos 0,5 s por la medición de CPU. Solo se leen `thermal_zone*`, no
+otros tipos de sensor.
+
+## ADR-041 · Consulta HTTP periódica con pausa en pestaña oculta, sin WebSockets
+
+**Estado:** Aceptada (2026-11-16).
+
+**Alternativas.** (a) WebSockets o *Server-Sent Events*: más complejos de probar y de proteger.
+(b) Consultar cada 5 s con HTTP normal.
+
+**Decisión.** Opción (b), con `setTimeout` encadenado (la siguiente consulta se programa cuando
+termina la anterior, así nunca se acumulan peticiones). Se pausa con la pestaña oculta
+(`visibilitychange`), se reanuda al volver y se detiene al cerrar sesión o al recibir 401.
+
+**Consecuencias.** Los datos tienen hasta 5 s de retraso. Sin conexiones persistentes, la
+autenticación y el CSRF son los mismos que en el resto de la API.

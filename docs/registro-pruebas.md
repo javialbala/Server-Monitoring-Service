@@ -21,7 +21,7 @@ validaciones:
 
 | # | Validación | Comando / procedimiento | Resultado real |
 |---|---|---|---|
-| 0.7 | Integridad de `formato_preguntas.md` al versionarlo | `sha256sum formato_preguntas.md`; `git show HEAD:formato_preguntas.md \| sha256sum`; `git diff --quiet HEAD -- formato_preguntas.md` | SHA-256 idéntico en disco y en Git (`af7d48262e8296a301435dc448af91f58bd84bbef21520ea3a6ef6b12d26f694`); sin diferencias. Commit `7275902`. |
+| 0.7 | Integridad de `formato_preguntas.md` al versionarlo | `sha256sum formato_preguntas.md`; `git show HEAD:formato_preguntas.md \| sha256sum`; `git diff --quiet HEAD -- formato_preguntas.md` | SHA-256 idéntico en disco y en Git (`af7d48262e8296a301435dc448af91f58bd84bbef21520ea3a6ef6b12d26f694`); sin diferencias. Commit `8dc4833`. |
 | 0.8 | *Push* a GitHub | `git push -u origin main`, `git push -u origin fase-00-analisis` (HTTPS) | **Fallido**: `fatal: could not read Username for 'https://github.com': terminal prompts disabled`. Sin credenciales HTTPS ni CLI `gh`. Una comprobación de autenticación SSH no se ejecutó (denegada por los permisos del entorno). |
 | 0.9 | Coherencia de la documentación tras incorporar los matices | Script de enlaces relativos; `grep` de `RuntimeSpec`, de ADR en estado *Propuesta* y de patrones de secretos | 15 archivos, 17 enlaces relativos, 0 rotos. `RuntimeSpec` solo aparece como nombre antiguo. Ninguna ADR en estado *Propuesta*. Sin secretos. |
 
@@ -104,8 +104,8 @@ pruebas que usan base de datos emplean archivos temporales o proyectos Compose s
 Errores encontrados y corregidos durante la revisión:
 
 1. La imagen del agente incluía `argon2-cffi` y `httpx` porque eran dependencias base. Se separaron en
-   extras por componente (commit `e43ff57`).
-2. `/docs` y `/redoc` dependían de un CDN y quedaban rotas por la CSP. Desactivadas (commit `2cd9e44`).
+   extras por componente (commit `679529d`).
+2. `/docs` y `/redoc` dependían de un CDN y quedaban rotas por la CSP. Desactivadas (commit `6297e77`).
 3. El navegador pedía `/favicon.ico` (404 en consola). Añadido `favicon.svg` local.
 4. El script E2E dejaba sus imágenes `minipaas-e2e-*`. Ahora usa `down -v --rmi local`.
 5. Durante el recorrido del panel, dos fallos eran de la propia herramienta de prueba (un selector que
@@ -114,3 +114,31 @@ Errores encontrados y corregidos durante la revisión:
    descartarlo.
 
 No ejecutado: CI en GitHub (sin *push* en esta fase, por indicación del usuario).
+
+## Renovación — Plataforma de monitorización de solo lectura (2026-11-16)
+
+Entorno: máquina local CachyOS (kernel 7.3.0-4-cachyos), Python 3.12 (`uv sync --all-extras`),
+Docker 29.9.2, Compose 5.6.1, rama `renovacion-monitorizacion`. **No se usó el servidor Ubuntu real.**
+Las pruebas con Docker usaron proyectos Compose separados (`minipaas-e2e`, `minipaas-ui`).
+
+| # | Prueba | Comando / procedimiento | Resultado real |
+|---|---|---|---|
+| R.1 | Estilo y análisis estático | `uv run ruff check .`; `uv run ruff format --check .` | `All checks passed!`; formato sin cambios |
+| R.2 | Suite completa | `uv run pytest -q` | **48 passed**, 1 aviso (deprecación de httpx en el `TestClient` de Starlette; no es un fallo) |
+| R.3 | Suite sin integración (la del CI) | `uv run pytest -q -m "not integration"` | **45 passed**, 3 deselected |
+| R.4 | Extremo a extremo con Docker real | `bash scripts/e2e_monitor.sh` | **29 OK**, «E2E correcto.» Comprobaciones: despliegue y `set-password` (rechaza 3 caracteres, acepta la de prueba); 401 sin sesión en `/api/metrics` y `/api/containers`; login incorrecto 401 y correcto 204 con cookie; CPU entre 0 y 100; RAM igual a `MemTotal` del anfitrión y coherente; disco igual al de `/` (`df`); *hostname* y SO del anfitrión; uptime ±60 s; segunda consulta con medición nueva; contenedor ajeno detectado con imagen, estado, puerto y proyecto Compose; mismo número de contenedores que `docker ps`; un contenedor parado deja de aparecer; las consultas no generan eventos de modificación en `docker events`; el panel no tiene el socket; el agente no puede escribir en `/hostfs`; `/hostfs/proc` vacío; logout sin CSRF 403 y con CSRF 204; la cookie antigua da 401; tras 5 fallos la IP queda bloqueada (429) incluso con la contraseña correcta |
+| R.5 | Recorrido en navegador | Proyecto Compose aislado `minipaas-ui` en el puerto 8011; `MINIPAAS_URL=http://127.0.0.1:8011 MINIPAAS_PASSWORD=... uvx --with playwright python scripts/e2e_ui.py` | **11 OK**, «UI correcta.»: error con contraseña incorrecta («Contraseña incorrecta»); tarjetas CPU, Memoria RAM, Disco y Sistema; la tabla de contenedores tiene filas; la hora de actualización cambia sola (16:15:09 → 16:15:15); sin consultas con la pestaña oculta; reanudación al volver; logout vuelve al login; el servidor ya no reconoce la sesión |
+| R.6 | Datos mostrados por el panel en la máquina local | Mismo recorrido | CPU Intel i7-8550U de 8 núcleos, RAM 15,5 GiB, disco 238 GiB, CachyOS, 15 sensores de temperatura y los contenedores en ejecución, incluidos los ajenos a la plataforma (p. ej. `calendar_paas_db` con `postgres:16-alpine`) |
+
+Fallos encontrados y corregidos durante el desarrollo (eran del script de prueba, no de la plataforma):
+
+1. La comprobación de `docker events` falló por (a) los *healthchecks* que Docker ejecuta por su
+   cuenta (eventos `exec_create`, `exec_start`, `die`) y (b) la parada del contenedor de prueba hecha
+   por el propio script en el mismo segundo (`docker events --since` tiene resolución de segundos).
+   Se corrigió el script.
+2. La prueba de navegador necesitó ajustes: selectores, usar `browser.new_context()` y usar
+   `wait_for` (`is_visible` no espera).
+
+No ejecutado: `scripts/verify_dev_env.sh` (reconstruir el entorno `minipaas-dev` quedó bloqueado por
+los permisos del modo automático); CI en GitHub (sin *push*); servidor Ubuntu real; medición de
+consumo de memoria y CPU.
