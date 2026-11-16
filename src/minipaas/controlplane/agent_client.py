@@ -1,18 +1,14 @@
-"""Cliente HTTP del agente."""
+"""Cliente HTTP del agente (solo lectura)."""
 
 import logging
-from dataclasses import dataclass
 
 import httpx
 
 logger = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True)
-class AgentHealth:
-    reachable: bool
-    docker_reachable: bool = False
-    reason: str | None = None  # motivo corto, solo para uso interno/logs
+class AgentError(Exception):
+    """El agente no responde o devolvió un error."""
 
 
 class AgentClient:
@@ -30,24 +26,22 @@ class AgentClient:
             transport=transport,
         )
 
-    async def health(self) -> AgentHealth:
-        """Consulta el agente. Nunca lanza: devuelve "no alcanzable" con un motivo."""
+    async def _get(self, path: str) -> dict:
+        """GET al agente; devuelve su JSON tal cual. Cualquier fallo se convierte en AgentError."""
         try:
-            response = await self._client.get("/health")
+            response = await self._client.get(path)
             response.raise_for_status()
-            docker_ok = bool(response.json()["docker"]["reachable"])
-        except httpx.HTTPStatusError as error:
-            return self._unreachable(f"respuesta HTTP {error.response.status_code}")
-        except httpx.HTTPError as error:
-            return self._unreachable(f"error de conexión ({type(error).__name__})")
-        except (ValueError, KeyError, TypeError):
-            return self._unreachable("respuesta inválida")
-        return AgentHealth(reachable=True, docker_reachable=docker_ok)
+            return response.json()
+        except (httpx.HTTPError, ValueError) as error:
+            # Solo se registra el tipo de error: el detalle no debe llegar al navegador.
+            logger.error("Fallo al consultar el agente (%s): %s", path, type(error).__name__)
+            raise AgentError(path) from error
 
-    @staticmethod
-    def _unreachable(reason: str) -> AgentHealth:
-        logger.error("El agente no está disponible: %s", reason)
-        return AgentHealth(reachable=False, reason=reason)
+    async def metrics(self) -> dict:
+        return await self._get("/metrics")
+
+    async def containers(self) -> dict:
+        return await self._get("/containers")
 
     async def aclose(self) -> None:
         await self._client.aclose()

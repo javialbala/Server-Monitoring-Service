@@ -1,11 +1,12 @@
-"""Configuración del control plane, leída del entorno."""
+"""Configuración del panel, leída de variables de entorno."""
 
 import os
 from dataclasses import dataclass
 
 from minipaas.common.secrets import TOKEN_FILE_ENV, TokenError
 
-DEFAULT_DB_PATH = "/data/minipaas.sqlite3"
+# Ruta de un archivo, no una contraseña (falso positivo de bandit).
+DEFAULT_PASSWORD_HASH_FILE = "/data/password_hash"  # noqa: S105
 
 
 class ConfigError(Exception):
@@ -26,7 +27,8 @@ class ControlPlaneSettings:
     agent_url: str
     token_file: str
     agent_timeout: float = 3.0
-    db_path: str = DEFAULT_DB_PATH
+    # Archivo con el hash Argon2id de la contraseña (lo crea `manage set-password`).
+    password_hash_file: str = DEFAULT_PASSWORD_HASH_FILE
     # La cookie solo viaja por HTTPS si es true. Debe activarse en cuanto haya HTTPS
     # (en desarrollo local se sirve por HTTP y el navegador descartaría la cookie).
     cookie_secure: bool = False
@@ -44,8 +46,8 @@ class ControlPlaneSettings:
         ):
             if getattr(self, name) < 1:
                 raise ConfigError(f"{name} debe ser un entero positivo.")
-        if not self.db_path:
-            raise ConfigError("MINIPAAS_DB_PATH no puede estar vacío.")
+        if not self.password_hash_file:
+            raise ConfigError("MINIPAAS_PASSWORD_HASH_FILE no puede estar vacío.")
 
     @classmethod
     def from_env(cls) -> "ControlPlaneSettings":
@@ -55,6 +57,8 @@ class ControlPlaneSettings:
         return cls(
             agent_url=os.environ.get("MINIPAAS_AGENT_URL", "http://agent:8001"),
             token_file=token_file,
-            db_path=os.environ.get("MINIPAAS_DB_PATH", DEFAULT_DB_PATH),
+            password_hash_file=os.environ.get(
+                "MINIPAAS_PASSWORD_HASH_FILE", DEFAULT_PASSWORD_HASH_FILE
+            ),
             cookie_secure=_read_bool("MINIPAAS_COOKIE_SECURE", default=False),
         )
