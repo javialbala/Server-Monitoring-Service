@@ -6,18 +6,15 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# 1) Dependencias (incluido el SDK de Docker): versiones exactas y hashes de uv.lock (ADR-013).
 COPY deploy/requirements/agent.txt ./requirements.txt
 RUN pip install --no-cache-dir --require-hashes -r requirements.txt
 
-# 2) Código en PYTHONPATH, sin instalarlo como paquete.
 COPY src ./src
 
-# Usuario sin privilegios. El acceso al socket de Docker se concede en compose con
-# group_add (GID del grupo docker del host), no siendo root.
-RUN groupadd --gid 10002 minipaas-agent && \
-    useradd --uid 10002 --gid 10002 --no-create-home --shell /usr/sbin/nologin minipaas-agent
+# Sin root: el acceso al socket de Docker se da con group_add en docker-compose.yml.
+RUN groupadd --gid 10002 sms-agent && \
+    useradd --uid 10002 --gid 10002 --no-create-home --shell /usr/sbin/nologin sms-agent
 
 EXPOSE 8001
 USER 10002:10002
-CMD ["uvicorn", "--factory", "minipaas.agent.main:build_app_from_env", "--host", "0.0.0.0", "--port", "8001"]
+CMD ["uvicorn", "--factory", "server_monitor.agent.main:build_app_from_env", "--host", "0.0.0.0", "--port", "8001"]

@@ -1,67 +1,81 @@
-# MiniPaaS
+# Server Monitoring Service
 
-**Plataforma PaaS ligera y autohospedada para desplegar y gestionar aplicaciones en contenedores
-desde un panel web.**
+**Plataforma web ligera y autohospedada para monitorizar un servidor y sus contenedores Docker, en
+solo lectura.**
 
 Trabajo de la asignatura *Gestión de Sistemas de Archivos y Servicios Distribuidos* (GSASD).
-Título provisional: *«Diseño e implementación de una plataforma PaaS ligera para el despliegue y
-gestión de aplicaciones distribuidas»*.
 
-> **Estado actual: Fase 2 (persistencia, aplicaciones, autenticación y auditoría) terminada,
-> pendiente de aprobación.** El panel tiene inicio de sesión de un único administrador y permite
-> registrar, consultar, editar y eliminar aplicaciones, que se guardan en SQLite. **Todavía no se
-> pueden desplegar aplicaciones** (empieza en la Fase 3); las capacidades descritas abajo son
-> objetivos de las fases siguientes.
+> **Estado:** rediseño de interfaz y limpieza terminados y probados en local (rama
+> `rediseno-interfaz-limpieza`), **pendientes de aprobación**. Probado en CachyOS con Docker 29.9.2;
+> **todavía no se ha probado en el servidor Ubuntu real**. Informe:
+> [docs/informes/rediseno-interfaz-limpieza.md](docs/informes/rediseno-interfaz-limpieza.md). El
+> proyecto empezó como una PaaS (MiniPaaS) y cambió de objetivo el 2026-11-16; esa etapa está archivada
+> en [docs/historico/](docs/historico/etapa-paas.md).
 
 ## ¿Qué es?
 
-MiniPaaS permite a una persona desplegar, configurar, monitorizar y administrar aplicaciones en un
-servidor doméstico sin tener que usar Docker desde la terminal. El usuario trabaja con
-**aplicaciones y despliegues**; la plataforma se encarga de los contenedores, redes, volúmenes y
-límites de recursos.
+Un panel web, protegido con una contraseña, que muestra:
 
-Capacidades objetivo: desplegar desde una imagen o una plantilla, variables de entorno y secretos,
-puertos, almacenamiento persistente, redes privadas por aplicación, logs, health checks, métricas,
-límites de recursos, historial de despliegues y vuelta atrás a una versión anterior de la aplicación
-(la vuelta atrás no revierte los datos persistentes).
+- **El servidor anfitrión:** CPU, RAM, uno o varios discos, temperatura general (paquete del
+  procesador), velocidad de red, sistema operativo, kernel, *hostname* y tiempo en marcha, con
+  indicadores y gráficas de los últimos 10 minutos.
+- **Todos los contenedores Docker, en ejecución y detenidos:** nombre, imagen, estado, salud, puertos,
+  fecha de creación y proyecto/servicio de Compose, incluidos los creados fuera de la plataforma.
+
+Se actualiza solo cada 5 segundos. **No puede crear, iniciar, parar, borrar ni modificar**
+contenedores, imágenes ni volúmenes.
 
 ## Arquitectura en una frase
 
-Un **control plane** sin privilegios (FastAPI + SQLite + panel web) decide *qué* hay que hacer, y un
-**agente** aislado, el único con acceso a Docker, ejecuta solo una lista cerrada de operaciones
-seguras sobre recursos que pertenecen a MiniPaaS. Detalles en
+Un **panel** sin acceso a Docker (FastAPI + web estática) pide los datos a un **agente** interno, el
+único con el socket de Docker, que solo hace consultas de lectura y lee `/proc`, `/sys` y el `/`, la red
+y los discos extra del anfitrión montados en solo lectura. Sin base de datos. Detalles en
 [docs/03-arquitectura.md](docs/03-arquitectura.md).
 
-## Tecnologías previstas
+```text
+Navegador ──▶ Panel (sin socket) ──token──▶ Agente (solo lectura) ──▶ Docker, /proc, /sys, /hostfs, /disks, /host/net/dev
+```
 
-Python · FastAPI · Pydantic · SQLite · Docker Engine (SDK de Python) · Docker Compose ·
-HTML/CSS/JavaScript · Chart.js. Justificación en [docs/decisiones.md](docs/decisiones.md).
+## Tecnologías
 
-## Documentación
-
-Índice completo en [docs/README.md](docs/README.md).
+Python 3.12 · FastAPI · httpx · argon2-cffi · SDK de Docker · Docker Compose · HTML/CSS/JavaScript y SVG
+sin framework ni librerías · fuentes IBM Plex e iconos Lucide autoalojados. Justificación en
+[docs/10-decisiones.md](docs/10-decisiones.md).
 
 ## Puesta en marcha (desarrollo local)
 
 Requisitos: Linux, Docker Engine con Compose y [uv](https://docs.astral.sh/uv/).
 
 ```bash
-uv sync --all-extras && uv run pytest -m "not integration"   # tests
-bash scripts/prepare_dev_env.sh                      # token y GID de Docker (una vez)
+uv sync --all-extras && uv run pytest -q             # tests (68)
+bash scripts/prepare_dev_env.sh                      # token y GID de Docker (crea deploy/.env, 600)
+echo 'APP_PASSWORD=pon-aqui-tu-contrasena' >> deploy/.env   # 4 a 128 caracteres
 docker compose --env-file deploy/.env -f deploy/compose.dev.yaml up -d --build --wait
-docker compose --env-file deploy/.env -f deploy/compose.dev.yaml \
-    exec controlplane python -m minipaas.controlplane.manage create-admin --username admin
 ```
 
-Panel: <http://127.0.0.1:8000>. No hay credenciales por defecto: el administrador se crea con la
-última orden, que pide la contraseña sin mostrarla. La API está descrita en [docs/api.md](docs/api.md). Detalles y verificación del aislamiento en
-[docs/guia-desarrollo.md](docs/guia-desarrollo.md). La instalación en el servidor se documentará en
-la Fase 13.
+Panel: <http://127.0.0.1:8000>. La contraseña es la que pusiste en `APP_PASSWORD` (en `deploy/.env`,
+que no se versiona). No hay contraseña por defecto: sin `APP_PASSWORD` el panel no arranca. Para
+cambiarla más adelante hace falta confirmarlo con `APP_PASSWORD_RESET=true` (ver
+[docs/08-guia-desarrollo.md](docs/08-guia-desarrollo.md)). Si tenías el entorno antiguo (`minipaas-dev`), bájalo antes con
+`docker compose -p minipaas-dev down`. Para mostrar un disco extra, cómo ejecutar las pruebas extremo a
+extremo y los problemas frecuentes, ver [docs/08-guia-desarrollo.md](docs/08-guia-desarrollo.md).
+
+## Documentación
+
+Índice completo en [docs/README.md](docs/README.md). Lo principal:
+
+| Documento | Contenido |
+|---|---|
+| [docs/03-arquitectura.md](docs/03-arquitectura.md) | Componentes, diagramas y estructura del repositorio |
+| [docs/04-backend.md](docs/04-backend.md) | Cómo funciona el agente y el panel, métrica a métrica |
+| [docs/05-api.md](docs/05-api.md) | Endpoints y ejemplos JSON |
+| [docs/06-seguridad.md](docs/06-seguridad.md) | Amenazas y medidas |
+| [docs/09-interfaz.md](docs/09-interfaz.md) | Diseño de la interfaz y sus componentes |
 
 ## Seguridad
 
-La plataforma no usa contenedores privilegiados, no da acceso al socket de Docker al componente
-expuesto a la red, no permite ejecutar comandos arbitrarios y solo actúa sobre recursos etiquetados
-como propios. El panel exige sesión (contraseñas con Argon2id, sesiones revocables en servidor,
-protección CSRF, límite de intentos) y registra las operaciones en un log de auditoría. Ver
-[docs/04-seguridad.md](docs/04-seguridad.md).
+El panel no tiene el socket de Docker; el agente (único con el socket) está en una red interna sin
+puertos, exige un token y solo hace consultas de lectura. Ningún contenedor es privilegiado ni root.
+La contraseña se guarda con Argon2id; hay límite de intentos, cookie `HttpOnly`/`SameSite=Strict`, CSRF,
+CSP y sesiones con caducidad. Limitaciones conocidas (el socket de Docker sigue dando acceso equivalente
+a root al agente, sesiones en memoria...) en [docs/06-seguridad.md](docs/06-seguridad.md).

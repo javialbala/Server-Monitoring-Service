@@ -1,100 +1,86 @@
 # 2. Requisitos
 
-> Estado del documento: **aprobado por el equipo (2026-11-15)** con los matices de `decisiones.md`.
-> Ningún requisito está implementado todavía.
+> Estado del documento: **actualizado en la fase de rediseño de interfaz y limpieza (2026-11-16)**.
+> Solo requisitos vigentes. Los identificadores `RF-M..` y `RNF-M..` (M de monitorización) no se
+> confunden con los de la etapa PaaS, archivados en
+> [historico/etapa-paas.md](historico/etapa-paas.md).
 >
-> Prioridad (MoSCoW): **M** = imprescindible, **S** = debería, **C** = podría (si hay tiempo).
-> La columna *Fase* indica en qué fase del roadmap se prevé implementarlo.
+> Prioridad (MoSCoW): **M** = imprescindible, **S** = debería, **C** = podría.
+> Estado: **Verificado** = hay una prueba ejecutada con resultado real (ver [07-pruebas.md](07-pruebas.md));
+> **Parcial** = una parte verificada y otra no; **Pendiente** = no verificado todavía.
+> Todas las verificaciones se hicieron en local (CachyOS); ninguna en el servidor Ubuntu real.
 
 ## 2.1 Requisitos funcionales
 
-### Autenticación y acceso
+### Acceso
 
-| ID | Requisito | Prioridad | Fase |
+| ID | Requisito | Prioridad | Estado |
 |---|---|---|---|
-| RF-01 | El panel y la API exigen iniciar sesión con usuario y contraseña. Existe un único usuario administrador, creado en la instalación (ADR-010). | M | 2 |
-| RF-02 | El usuario puede cerrar sesión; las sesiones caducan tras un tiempo de inactividad. | M | 2 |
-| RF-03 | Las operaciones relevantes (crear, desplegar, detener, eliminar…) quedan registradas en un log de auditoría consultable. | M | 2–3 |
+| RF-M01 | El panel y los datos exigen iniciar sesión con una contraseña única (4–128 caracteres). | M | Verificado |
+| RF-M02 | La contraseña se escribe en `APP_PASSWORD` del servicio `panel` de `docker-compose.yml` (4–128 caracteres), sin valor por defecto: si falta, está vacía o no es válida, el panel no arranca (código 1) y el log lo explica. Solo se calcula su hash en memoria; nada se guarda en disco y nunca se registra. | M | Verificado (tests y E2E con Docker real) |
+| RF-M05 | Cambiar la contraseña consiste en editar `APP_PASSWORD` y ejecutar `docker compose up -d`; la antigua deja de valer y las sesiones abiertas se cierran. | M | Verificado (tests y E2E con Docker real) |
+| RF-M03 | El usuario puede cerrar sesión; la sesión caduca a los 30 min de inactividad y a las 8 h como máximo. | M | Verificado (caducidad con reloj simulado) |
+| RF-M04 | Los accesos (correctos, fallidos, bloqueos, cierres) se registran sin contraseñas. | S | Implementado; sin prueba automática del contenido del registro |
 
-### Aplicaciones y despliegues
+### Métricas del servidor anfitrión
 
-| ID | Requisito | Prioridad | Fase |
+| ID | Requisito | Prioridad | Estado |
 |---|---|---|---|
-| RF-10 | Listar las aplicaciones con su estado (en ejecución, detenida, desplegando, con errores). | M | 2–3 |
-| RF-11 | Crear una aplicación indicando un nombre válido y su configuración. | M | 2 |
-| RF-12 | Ver el detalle de una aplicación: servicios, configuración, despliegue actual, estado. | M | 3 |
-| RF-13 | Desplegar una aplicación a partir de una imagen de un registro de contenedores. | M | 3–4 |
-| RF-14 | Desplegar una aplicación a partir de una plantilla predefinida (p. ej. web estática, WordPress+MariaDB). | M | 4 |
-| RF-15 | Cada despliegue queda registrado con número de revisión, configuración, fecha y resultado. | M | 4 |
-| RF-16 | Volver a desplegar la versión de la aplicación (imagen y configuración) de una revisión anterior (*rollback* de aplicación). **No revierte los datos de los volúmenes**; el panel lo advierte antes de confirmar (ADR-011). | S | 4 |
-| RF-17 | Si un despliegue nuevo falla al arrancar, la plataforma restaura automáticamente la versión anterior de la aplicación (con la misma limitación respecto a los datos que RF-16). | S | 4 |
-| RF-18 | Iniciar, detener y reiniciar una aplicación completa. | M | 3 |
-| RF-19 | Eliminar una aplicación, preguntando si se conservan o borran sus volúmenes. | M | 3, 6 |
-| RF-20 | Una aplicación puede estar formada por varios servicios que se comunican entre sí por nombre. | S | 7 |
+| RF-M10 | Mostrar el uso de CPU en porcentaje, el número de núcleos y el modelo. | M | Verificado |
+| RF-M11 | Mostrar la memoria RAM: total, usada, disponible y porcentaje. | M | Verificado |
+| RF-M12 | Mostrar el disco raíz del anfitrión y los discos extra que el administrador declare en `/disks/<nombre>` (solo lectura): total, usado, libre y porcentaje (como `df`), con un indicador por disco. Los discos del mismo sistema de archivos que el raíz no se repiten. | M | Verificado el raíz (E2E contra `df`) y el indicador por disco (navegador). Discos extra: solo con directorios falsos; **sin disco extra real montado** |
+| RF-M13 | Mostrar sistema operativo, kernel, arquitectura, *hostname* y tiempo en marcha. | M | Verificado |
+| RF-M14 | Mostrar **una sola** temperatura general: la del paquete del procesador (Intel `coretemp`, AMD `k10temp` o `x86_pkg_temp`); «No disponible» si no hay sensor fiable. | S | Verificado con `coretemp` en el equipo local (E2E ±5 °C). `k10temp` y `x86_pkg_temp`: solo con directorios falsos |
+| RF-M15 | Los valores mostrados corresponden al **anfitrión**, no al contenedor del agente. | M | Verificado |
+| RF-M16 | Mostrar la velocidad de red (bajada y subida) del anfitrión, calculada en el navegador a partir de contadores acumulados, excluyendo `lo`, `veth*`, `br-*`, `docker*` y `virbr*`. | S | Verificado: interfaces reales del anfitrión y suma coherente (E2E); gráfica dibujada con muestras reales (navegador). El valor numérico de la velocidad **no se ha contrastado** con una herramienta externa |
 
-### Configuración
+### Contenedores
 
-| ID | Requisito | Prioridad | Fase |
+| ID | Requisito | Prioridad | Estado |
 |---|---|---|---|
-| RF-30 | Definir variables de entorno por servicio. | M | 5 |
-| RF-31 | Marcar variables como secretas: no se muestran en la interfaz ni en logs una vez guardadas. | S | 5 |
-| RF-32 | Publicar puertos de un servicio hacia el exterior dentro de un rango permitido. | M | 5 |
-| RF-33 | Detectar conflictos de puertos antes de desplegar. | M | 5 |
+| RF-M20 | Listar **todos** los contenedores (en ejecución y detenidos) con nombre, imagen, estado, puertos y fecha de creación, con una sola llamada de lectura a Docker. | M | Verificado (E2E: mismo número que `docker ps -a`) |
+| RF-M21 | Incluir los contenedores creados fuera de la plataforma. | M | Verificado |
+| RF-M22 | Mostrar el proyecto y el servicio de Compose (etiquetas `com.docker.compose.*`) cuando existan. | S | Verificado |
+| RF-M23 | Un contenedor que se detiene sigue apareciendo, marcado como detenido; los que están en ejecución van primero. | M | Verificado (E2E y navegador) |
+| RF-M24 | Deducir la salud (`healthy`, `unhealthy`, `starting`) del texto de estado y mostrar «Con fallos» y «Arrancando» de forma diferenciada. | S | Verificado en tests de la conversión; **la presentación de «Con fallos» y «Arrancando» no se ha probado en navegador** |
+| RF-M25 | Agrupar los puertos publicados en IPv4 e IPv6 como uno solo. | C | Implementado; verificado solo por revisión (sin prueba automática de `formatPorts`) |
 
-### Almacenamiento
+### Actualización e interfaz
 
-| ID | Requisito | Prioridad | Fase |
+| ID | Requisito | Prioridad | Estado |
 |---|---|---|---|
-| RF-40 | Asociar volúmenes persistentes con nombre a una ruta del contenedor. | M | 6 |
-| RF-41 | Los volúmenes sobreviven a redespliegues, reinicios y actualizaciones de imagen. | M | 6 |
-| RF-42 | Listar los volúmenes de una aplicación con su tamaño ocupado. | S | 6 |
-| RF-43 | Exportar una copia (archivo `.tar.gz`) de un volumen. Es una copia de seguridad manual, no un mecanismo de *rollback* de datos. | C | 6 |
+| RF-M30 | Los datos se actualizan solos cada 5 s. | M | Verificado (navegador) |
+| RF-M31 | La actualización se pausa con la pestaña oculta, se reanuda al volver y se detiene al cerrar sesión o con un 401. | S | Verificado (navegador; la pestaña oculta se simula con `visibilitychange`) |
+| RF-M32 | Si el agente o Docker fallan, el panel lo indica con un estado de conexión y un mensaje comprensible, conservando los últimos datos. | S | Parcial: 502/503 verificados en tests de API; el aviso de la interfaz no se ha probado en navegador |
+| RF-M33 | Mostrar la evolución de CPU, RAM y red de los últimos 10 minutos en gráficas dibujadas en el navegador, con tooltip y cortes cuando faltan muestras. | S | Parcial: líneas, ≥ 3 muestras reales y tooltip con ratón verificados; el desplazamiento con la ventana llena (10 min) y el uso táctil **no probados** |
 
-### Redes y acceso
+### Solo lectura
 
-| ID | Requisito | Prioridad | Fase |
+| ID | Requisito | Prioridad | Estado |
 |---|---|---|---|
-| RF-50 | Cada aplicación tiene su propia red privada aislada de las demás. | M | 7 |
-| RF-51 | El panel muestra la URL o puerto por el que se accede a cada aplicación. | M | 7 |
-| RF-52 | Acceso por nombre (`app.dominio`) mediante proxy inverso. | C | 7 |
-
-### Monitorización
-
-| ID | Requisito | Prioridad | Fase |
-|---|---|---|---|
-| RF-60 | Consultar los logs recientes de cada servicio. | M | 8 |
-| RF-61 | Consultar el consumo actual de CPU y memoria de cada servicio. | M | 8 |
-| RF-62 | Mostrar el estado de salud (health check) de cada servicio. | M | 8 |
-| RF-63 | Mostrar métricas generales del host (CPU, memoria, disco). | S | 8 |
-| RF-64 | Mostrar la evolución reciente (p. ej. última hora) del consumo con gráficas. | C | 8 |
-
-### Recursos y ciclo de vida
-
-| ID | Requisito | Prioridad | Fase |
-|---|---|---|---|
-| RF-70 | Definir límites de memoria y CPU por servicio (con valores por defecto obligatorios). | M | 9 |
-| RF-71 | Definir la política de reinicio de cada servicio. | M | 9 |
-| RF-72 | Impedir desplegar si se superaría la cuota total de recursos asignada a la plataforma. | S | 9 |
-| RF-73 | Sincronizar el estado registrado con el estado real de Docker (p. ej. tras reiniciar el servidor). | M | 9 |
+| RF-M40 | La plataforma no crea, inicia, para, borra ni modifica contenedores, imágenes ni volúmenes, ni ofrece controles para ello. | M | Verificado (tests del agente, `docker events` en el E2E y ausencia de botones en el navegador) |
 
 ## 2.2 Requisitos no funcionales
 
-| ID | Categoría | Requisito | Cómo se verificará |
-|---|---|---|---|
-| RNF-01 | Seguridad | Ningún contenedor de usuario se crea con `privileged`, capacidades añadidas, `network_mode: host`, PID/IPC del host ni montajes del sistema de archivos del host. El agente construye internamente la configuración de Docker y no acepta parámetros de Docker arbitrarios (ADR-002). | Tests unitarios del agente (peticiones con campos extra rechazadas; configuración construida sin opciones peligrosas) + test de integración con `docker inspect`. |
-| RNF-02 | Seguridad | Solo el agente tiene acceso al socket de Docker. El control plane y el frontend no. | Revisión de `compose.yaml` + test que comprueba que el contenedor API no ve el socket. |
-| RNF-03 | Seguridad | El agente solo opera sobre recursos con la etiqueta `minipaas.managed=true`. | Test de integración: un contenedor ajeno no puede pararse ni borrarse. |
-| RNF-04 | Seguridad | Todas las entradas se validan con esquemas estrictos (nombres, imágenes, puertos, rutas). | Tests unitarios con entradas maliciosas. |
-| RNF-05 | Seguridad | Contraseñas almacenadas con hash lento (Argon2 o bcrypt); cookies `HttpOnly`, `SameSite=Strict`; protección CSRF en operaciones que modifican estado. | Tests de API. |
-| RNF-06 | Seguridad | Los procesos propios de MiniPaaS no se ejecutan como root dentro de sus contenedores (salvo justificación documentada). | `docker inspect` / test. |
-| RNF-07 | Rendimiento | **Objetivo de diseño** (no verificado): consumo de MiniPaaS en reposo < 250 MB de RAM y < 5 % de una CPU. Seguirá siendo un objetivo, no un resultado, hasta que se mida. | Medición con `docker stats` en la Fase 12 (y mediciones orientativas desde la Fase 3). |
-| RNF-08 | Rendimiento | Las páginas del panel responden en < 1 s en red local (excepto operaciones de despliegue, que son asíncronas). | Medición en la Fase 12. |
-| RNF-09 | Fiabilidad | Si MiniPaaS se detiene o reinicia, las aplicaciones desplegadas siguen funcionando. | Test manual/integración. |
-| RNF-10 | Fiabilidad | Un despliegue fallido no deja contenedores huérfanos ni deja la aplicación sin servicio si había una versión anterior funcional. | Test de integración con imagen que falla. |
-| RNF-11 | Usabilidad | Una persona que no conoce Docker puede desplegar una plantilla en menos de 3 minutos. | Prueba con usuario en la Fase 12. |
-| RNF-12 | Usabilidad | Las acciones destructivas piden confirmación; los errores se muestran en lenguaje comprensible. | Revisión de la interfaz. |
-| RNF-13 | Mantenibilidad | Código con nombres descriptivos, funciones cortas, documentación de módulos y estilo homogéneo (`ruff`). | `ruff check` en CI, revisión. |
-| RNF-14 | Mantenibilidad | Cobertura de tests de la lógica de validación y del agente ≥ 80 %. | `pytest --cov`. |
-| RNF-15 | Portabilidad | Se instala con `docker compose up` en Ubuntu con Docker Engine, sin más dependencias en el host. | Prueba en máquina limpia/VM en la Fase 13. |
-| RNF-16 | Trazabilidad | Toda operación administrativa queda en el log de auditoría con usuario, fecha, acción y resultado. | Tests de API. |
-| RNF-17 | Aislamiento del entorno | Durante el desarrollo, nada se ejecuta contra el servidor real. | Procedimiento documentado. |
+| ID | Categoría | Requisito | Cómo se verifica | Estado |
+|---|---|---|---|---|
+| RNF-M01 | Seguridad | El panel (expuesto al navegador) no tiene el socket de Docker. | E2E: el panel no ve el socket | Verificado |
+| RNF-M02 | Seguridad | El agente solo tiene rutas `GET`, no tiene puertos publicados ni salida a Internet (solo lo alcanza el panel, por la red interna) y solo consulta a Docker `containers(all=True)` y `version`. | Tests del agente y E2E (agente inaccesible desde el anfitrión y sin Internet) | Verificado |
+| RNF-M03 | Seguridad | Ningún contenedor propio es privilegiado, usa root, ni capabilities; sistema de archivos de solo lectura; `no-new-privileges`. | `docker-compose.yml`; E2E (`e2e_monitor.sh`) | Verificado |
+| RNF-M04 | Seguridad | Los montajes del anfitrión (`/hostfs`, `/host/net/dev`, `/disks/*`) son de solo lectura; `/hostfs` sin submontajes. | E2E | Verificado `/hostfs`; `/host/net/dev` se comprobó en un contenedor efímero (se leen las interfaces reales) y en el E2E; `/disks/*` sin probar con un disco real |
+| RNF-M05 | Seguridad | Contraseña con Argon2id; cookie `HttpOnly`, `SameSite=Strict`, `Secure` configurable; límite de 5 fallos en 15 min por IP. | Tests del panel y E2E | Verificado |
+| RNF-M06 | Seguridad | CSRF por sesión en el cierre de sesión y comprobación de `Origin` en métodos no seguros. | Tests del panel y E2E | Verificado |
+| RNF-M07 | Seguridad | CSP `default-src 'self'` sin recursos externos (fuentes e iconos autoalojados), sin `innerHTML` con datos del servidor, sin `/docs`. | Test de cabeceras; navegador sin errores de CSP; revisión del JS | Verificado |
+| RNF-M08 | Mantenibilidad | Código sencillo y pequeño (788 líneas de Python), comentarios en español, sin librerías de JavaScript y sin dependencias nuevas de Python. | `ruff`; `node --check`; revisión | Verificado |
+| RNF-M09 | Mantenibilidad | Pruebas automáticas suficientes y rápidas. | `uv run pytest` (51 tests) | Verificado |
+| RNF-M10 | Rendimiento | Una consulta de métricas tarda del orden de 0,5 s (medición de CPU). | Diseño (ADR-040); sin medición formal | Pendiente de medir |
+| RNF-M11 | Rendimiento | **Objetivo de diseño:** consumo bajo de RAM y CPU. Sin cifra verificada. | Medir con `docker stats` | Pendiente |
+| RNF-M12 | Portabilidad | Funciona con `docker compose up -d --build` en Linux con Docker Engine 25 o superior (API 1.44). | Probado en CachyOS; **no** en Ubuntu | Parcial |
+| RNF-M13 | Aislamiento del entorno | El desarrollo y las pruebas no tocan el servidor real. | Procedimiento | Cumplido |
+| RNF-M14 | Usabilidad | Interfaz clara, adaptable a pantallas estrechas (sin scroll horizontal a 1024 y 390 px), con mensajes de error en español. | Navegador (`e2e_ui.py`) | Verificado en 1024 y 390 px |
+| RNF-M15 | Accesibilidad | Estado nunca solo por color, foco visible, `prefers-reduced-motion`; información de las gráficas disponible también como texto. | Revisión del CSS y JS | Parcial: implementado y revisado; el **tooltip no es accesible por teclado** (los valores actuales están en la leyenda) y no hay auditoría automática |
+
+## 2.3 Requisitos retirados de la etapa PaaS
+
+Los requisitos de la etapa PaaS (RF-01 a RF-73 y RNF-01 a RNF-17) ya no son vigentes: ver
+[historico/etapa-paas.md](historico/etapa-paas.md).
