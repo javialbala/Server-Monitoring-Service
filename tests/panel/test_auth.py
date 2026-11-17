@@ -1,17 +1,14 @@
-import pytest
 from conftest import PASSWORD
 
-from minipaas.controlplane import manage
-from minipaas.controlplane.security.passwords import hash_password, verify_password
-from minipaas.controlplane.security.rate_limit import LoginRateLimiter
-from minipaas.controlplane.security.sessions import SessionStore
+from server_monitor.panel.security.rate_limit import LoginRateLimiter
+from server_monitor.panel.security.sessions import SessionStore
 
 
 def test_login_ok_sets_cookie_with_secure_flags(client):
     response = client.post("/api/login", json={"password": PASSWORD})
     assert response.status_code == 204
     cookie = response.headers["set-cookie"].lower()
-    assert "minipaas_session=" in cookie
+    assert "sms_session=" in cookie
     assert "httponly" in cookie
     assert "samesite=strict" in cookie
     assert "secure" not in cookie  # cookie_secure es false por defecto
@@ -25,11 +22,6 @@ def test_login_wrong_password(client):
     assert response.status_code == 401
     assert response.json() == {"detail": "Contraseña incorrecta"}
     assert client.get("/api/session").json() == {"authenticated": False, "csrf_token": None}
-
-
-def test_login_without_password_configured_is_503(client, hash_file):
-    hash_file.unlink()
-    assert client.post("/api/login", json={"password": PASSWORD}).status_code == 503
 
 
 def test_blocked_after_too_many_failures(client):
@@ -68,7 +60,7 @@ def test_session_expires_by_inactivity_and_by_age():
     assert store.get(token) is None  # inactiva más de 30 min
 
     token, _ = store.create()
-    for _ in range(17):  # activa cada 29 min, pero a las 8 h caduca igualmente
+    for _ in range(17):  # activa cada 29 min: a las 8 h caduca igualmente
         now[0] += 29 * 60
         store.get(token)
     assert store.get(token) is None
@@ -84,36 +76,3 @@ def test_rate_limiter_window():
     assert limiter.is_blocked("2.2.2.2") is None  # solo afecta a esa IP
     now[0] = 61
     assert limiter.is_blocked("1.1.1.1") is None
-
-
-# --- set-password ---
-
-
-def test_set_password_stores_hash_not_plaintext(tmp_path, monkeypatch, capsys):
-    path = tmp_path / "datos" / "password_hash"
-    monkeypatch.setenv("MINIPAAS_PASSWORD_HASH_FILE", str(path))
-    monkeypatch.setattr("sys.stdin", __import__("io").StringIO("mi-clave\n"))
-    assert manage.main(["set-password", "--stdin"]) == 0
-    content = path.read_text()
-    assert "mi-clave" not in content
-    assert content.startswith("$argon2id$")
-    assert verify_password(content.strip(), "mi-clave")
-    assert path.stat().st_mode & 0o777 == 0o600
-
-
-@pytest.mark.parametrize("password", ["abc", "x" * 129])
-def test_set_password_rejects_bad_length(tmp_path, monkeypatch, password):
-    path = tmp_path / "password_hash"
-    monkeypatch.setenv("MINIPAAS_PASSWORD_HASH_FILE", str(path))
-    monkeypatch.setattr("sys.stdin", __import__("io").StringIO(password + "\n"))
-    assert manage.main(["set-password", "--stdin"]) == 1
-    assert not path.exists()
-
-
-def test_set_password_accepts_4_characters_and_replaces_old_hash(tmp_path, monkeypatch):
-    path = tmp_path / "password_hash"
-    path.write_text(hash_password("antigua"))
-    monkeypatch.setenv("MINIPAAS_PASSWORD_HASH_FILE", str(path))
-    monkeypatch.setattr("sys.stdin", __import__("io").StringIO("abcd\n"))
-    assert manage.main(["set-password", "--stdin"]) == 0
-    assert verify_password(path.read_text().strip(), "abcd")

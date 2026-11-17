@@ -1,14 +1,11 @@
-"""Fixtures del panel: app con un agente falso (httpx.MockTransport) y contraseña de prueba."""
-
 import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from minipaas.controlplane.agent_client import AgentClient
-from minipaas.controlplane.config import ControlPlaneSettings
-from minipaas.controlplane.main import create_app
-from minipaas.controlplane.manage import write_hash_file
-from minipaas.controlplane.security.passwords import hash_password
+from server_monitor.panel.agent_client import AgentClient
+from server_monitor.panel.config import PanelSettings
+from server_monitor.panel.main import create_app
+from server_monitor.panel.security.passwords import hash_password
 
 PASSWORD = "clave-de-prueba"
 METRICS = {"hostname": "servidor", "cpu": {"percent": 12.5, "cores": 4, "model": None}}
@@ -24,7 +21,6 @@ class FakeAgent:
     def __call__(self, request: httpx.Request) -> httpx.Response:
         if self.down:
             return httpx.Response(500)
-        assert request.headers["Authorization"] == "Bearer " + "t" * 40
         return httpx.Response(
             200, json={"/metrics": METRICS, "/containers": CONTAINERS}[request.url.path]
         )
@@ -36,23 +32,10 @@ def agent() -> FakeAgent:
 
 
 @pytest.fixture
-def hash_file(tmp_path):
-    path = tmp_path / "password_hash"
-    write_hash_file(str(path), hash_password(PASSWORD))
-    return path
-
-
-@pytest.fixture
-def settings(hash_file) -> ControlPlaneSettings:
-    return ControlPlaneSettings(
-        agent_url="http://agent:8001", token_file="/no/se/usa", password_hash_file=str(hash_file)
-    )
-
-
-@pytest.fixture
-def client(settings, agent):
-    agent_client = AgentClient("http://agent:8001", "t" * 40, transport=httpx.MockTransport(agent))
-    with TestClient(create_app(settings, agent_client)) as test_client:
+def client(agent):
+    agent_client = AgentClient("http://agent:8001", transport=httpx.MockTransport(agent))
+    app = create_app(PanelSettings(), agent_client, hash_password(PASSWORD))
+    with TestClient(app) as test_client:
         yield test_client
 
 

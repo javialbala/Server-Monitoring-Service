@@ -6,8 +6,6 @@ docs
 tests
 scripts
 data
-deploy/secrets
-deploy/.env
 .env
 .env.*
 __pycache__

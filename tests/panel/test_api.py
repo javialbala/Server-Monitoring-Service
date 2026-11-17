@@ -33,8 +33,15 @@ def test_after_logout_data_is_not_available(client, csrf):
 def test_static_files_are_served_with_csp(client):
     page = client.get("/")
     assert page.status_code == 200
-    assert "MiniPaaS" in page.text
+    assert "Server Monitoring Service" in page.text
     assert page.headers["Content-Security-Policy"] == "default-src 'self'"
     assert page.headers["X-Content-Type-Options"] == "nosniff"
     assert client.get("/js/app.js").status_code == 200
     assert "no-store" in client.get("/api/session").headers["Cache-Control"]
+
+
+def test_static_files_must_be_revalidated(client):
+    response = client.get("/js/app.js")
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-cache"
+    assert "etag" in response.headers

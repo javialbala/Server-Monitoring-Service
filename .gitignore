@@ -18,7 +18,6 @@ data/
 # Secretos y configuración local: nunca se versionan
 .env
 .env.*
-!.env.example
 *.pem
 *.key
 
@@ -27,7 +26,3 @@ data/
 .vscode/
 *.swp
 .DS_Store
-
-# Entorno de desarrollo local de Docker (los crea scripts/prepare_dev_env.sh)
-deploy/secrets/
-deploy/.env

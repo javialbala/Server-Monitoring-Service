@@ -1,12 +1,4 @@
-"""Clientes Docker falsos que solo permiten consultas."""
-
-TOKEN = "t" * 40
-AUTH = {"Authorization": f"Bearer {TOKEN}"}
-
-
 class FakeDockerApi:
-    """Imita client.api: solo `containers` (consulta). Cualquier otra cosa falla."""
-
     def __init__(self, containers=None, error=None):
         self.containers_result = containers or []
         self.error = error
@@ -23,7 +15,7 @@ class FakeDockerApi:
 
 
 class FakeDockerClient:
-    """Solo permite consultas: api.containers y version. Todo lo demás hace fallar el test."""
+    """Solo permite api.containers y version; cualquier otra llamada hace fallar el test."""
 
     def __init__(self, containers=None, error=None):
         self.api = FakeDockerApi(containers, error)

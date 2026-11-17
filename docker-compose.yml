@@ -1,0 +1,82 @@
+# Instalación: git clone, escribir la contraseña (APP_PASSWORD) y `docker compose up -d --build`.
+name: server-monitoring
+
+networks:
+  # Sin salida a Internet: el agente solo se comunica con el panel.
+  internal:
+    internal: true
+  public:
+
+services:
+  panel:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.panel
+    # Accesible desde la red del servidor; para limitarlo a este equipo: "127.0.0.1:8000:8000"
+    ports:
+      - "8000:8000"
+    networks: [internal, public]
+    environment:
+      # Escribe aquí la contraseña del panel (4-128 caracteres); para cambiarla, edítala y
+      # ejecuta docker compose up -d
+      APP_PASSWORD: ""
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=2)"
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    depends_on:
+      - agent
+    restart: unless-stopped
+
+  agent:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.agent
+    # Sin "ports": solo es alcanzable desde la red interna.
+    networks: [internal]
+    volumes:
+      # Único componente con el socket de Docker. Montarlo con :ro no limita la API de Docker:
+      # la garantía de solo lectura está en el código del agente (solo consultas GET).
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Raíz del anfitrión en solo lectura y sin submontajes: disco raíz, hostname y os-release.
+      - type: bind
+        source: /
+        target: /hostfs
+        read_only: true
+        bind:
+          recursive: disabled
+      # Contadores de red reales del anfitrión sin usar network_mode: host.
+      - /proc/1/net/dev:/host/net/dev:ro
+      # Discos extra (descomenta y adapta): se ven en /disks/<nombre>.
+      # - /mnt/datos:/disks/datos:ro
+    # GID del socket de Docker en este servidor: stat -c %g /var/run/docker.sock
+    group_add: ["999"]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      SMS_HOSTFS: /hostfs
+      SMS_NET_DEV: /host/net/dev
+      SMS_DISKS_DIR: /disks
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health', timeout=2)"
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
