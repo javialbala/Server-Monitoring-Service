@@ -1,6 +1,6 @@
 # 6. Seguridad y riesgos
 
-> Estado del documento: **actualizado en la fase de rediseño de interfaz y limpieza (2026-11-16)**.
+> Estado del documento: **actualizado tras simplificar el despliegue (2026-11-16)**.
 > Cada medida indica si está verificada por una prueba ejecutada (ver [07-pruebas.md](07-pruebas.md))
 > o es solo de diseño. Las pruebas se han hecho en local; **no** en el servidor Ubuntu real. El
 > detalle de implementación está en [04-backend.md](04-backend.md).
@@ -18,7 +18,7 @@
 | # | Amenaza | Vector | Medida | Estado |
 |---|---|---|---|---|
 | T1 | Control de Docker desde el componente expuesto | Fallo en el panel | El panel no tiene el socket; solo el agente | Verificado (E2E) |
-| T2 | Un atacante usa el agente para modificar Docker | Llamar al agente directamente o abusar de él | Agente en red interna sin puertos publicados, token Bearer en todas las rutas, solo rutas `GET`, solo dos consultas de lectura a Docker (`containers(all=True)` y `version`), sin ejecución de comandos | Verificado (tests del agente; `docker events` sin eventos de modificación en el E2E) |
+| T2 | Un atacante usa el agente para modificar Docker | Llamar al agente directamente o abusar de él | Agente en la red `internal` (sin salida a Internet), sin puertos publicados y compartida solo con el panel (ADR-051); solo rutas `GET`, solo dos consultas de lectura a Docker (`containers(all=True)` y `version`), sin ejecución de comandos | Verificado (tests del agente; en el E2E el agente solo responde desde la red interna, no desde el anfitrión, y `docker events` no muestra modificaciones) |
 | T3 | Acceso no autorizado al panel | Adivinar la contraseña | Argon2id, 5 fallos en 15 min por IP → 429, contraseña de 4 a 128 caracteres | Verificado |
 | T4 | Robo o fijación de sesión | Cookie robada, identificador previsible | Token de 256 bits, guardado como SHA-256; cookie `HttpOnly`, `SameSite=Strict`, `Secure` configurable; identificador nuevo en cada login; caducidad 30 min de inactividad y 8 h absolutas | Verificado (tests; el flag `Secure` solo se prueba como atributo) |
 | T5 | CSRF | Web ajena que haga peticiones | Token por sesión en `X-CSRF-Token` (logout) y rechazo de `Origin` ajeno en métodos no seguros | Verificado |
@@ -26,32 +26,32 @@
 | T7 | Inyección de comandos | Datos del usuario en comandos | No se ejecutan comandos: solo la API de Docker y lecturas de archivos | Verificado por revisión |
 | T8 | Escritura en el anfitrión | Montajes del agente | `/hostfs` en solo lectura y sin submontajes; `/host/net/dev` (un único archivo) y `/disks/*` en solo lectura; proceso no root | Verificado `/hostfs` (E2E); `/host/net/dev` (E2E y contenedor efímero); `/disks/*` sin probar con disco real |
 | T8b | El agente lee más de lo previsto | Discos y archivos del anfitrión visibles para el agente | Los discos extra los declara el administrador en Compose (nada se descubre solo); solo se leen rutas fijas | Diseño (ADR-044) |
-| T9 | Fuga de la contraseña | Registros, argumentos, disco | Llega por la variable `APP_PASSWORD` (nunca como argumento); en disco solo el hash Argon2id (`/data/password_hash`, 600); ni el log ni los mensajes de error la escriben | Verificado en tests (hash, `caplog`) y en el E2E (el archivo y `docker compose logs` no la contienen) |
-| T9b | Contraseña visible en el entorno del contenedor | `docker inspect` | Riesgo **aceptado**: quien lee el entorno ya tiene acceso a Docker (equivalente a root). El valor vive en `deploy/.env` (no versionado, permisos 600), no en el YAML | Diseño (ADR-049); riesgo residual |
-| T9c | Cambio de contraseña involuntario | Editar `.env` por error | Un valor distinto del guardado impide arrancar salvo `APP_PASSWORD_RESET=true` | Verificado (tests y E2E) |
+| T9 | Fuga de la contraseña | Registros, argumentos, disco | Se escribe en `docker-compose.yml` y llega por la variable `APP_PASSWORD` (nunca como argumento); el panel solo conserva su hash Argon2id **en memoria**: nada en disco; ni el log ni los mensajes de error la escriben | Verificado en tests (`caplog`) y en el E2E (la contraseña no aparece en `docker compose logs`) |
+| T9b | Contraseña visible en claro | Leer `docker-compose.yml` o `docker inspect` | Riesgo **aceptado** (ADR-050): quien lee el entorno del contenedor ya tiene acceso a Docker (equivalente a root) y el archivo está en el servidor. No hay que subir el `docker-compose.yml` con la contraseña a un repositorio público | Diseño; riesgo residual |
+| T9c | Panel sin contraseña por error | `APP_PASSWORD` vacía, ausente o inválida | El panel no arranca: sale con código 1 y el log lo explica; nunca queda abierto sin contraseña | Verificado (tests y E2E) |
 | T10 | Fuga de detalles internos | Mensajes de error | 502/503 genéricos; el detalle solo va al log | Verificado en tests |
 | T11 | Documentación de API como superficie | `/docs`, `/openapi.json` | Desactivadas en panel y agente | Verificado |
-| T12 | Exposición del panel a Internet | Publicar el puerto | Por defecto escucha solo en `127.0.0.1`; HTTPS pendiente (proxy) | Diseño |
+| T12 | Exposición del panel a Internet | Publicar el puerto | El puerto 8000 se publica en todas las interfaces; se puede limitar a `127.0.0.1:8000:8000` o poner un proxy inverso con HTTPS delante | Diseño |
 
 ## 6.3 Medidas por componente
 
 **Panel.** Usuario no root (UID 10001), `read_only`, `tmpfs` en `/tmp`, `cap_drop: ALL`,
-`no-new-privileges`, sin socket, sin `privileged`. Escribe solo en `/data`. Usuario `sms-panel`.
+`no-new-privileges`, sin socket, sin `privileged`. No escribe en disco (solo `/tmp` en memoria). Usuario `sms-panel`.
 
 **Agente.** Usuario `sms-agent`, UID 10002, `read_only`, `cap_drop: ALL`, `no-new-privileges`, red `internal`, sin
 `ports`. El socket se monta sin `:ro` porque `:ro` no limitaría la API (ADR-037); la solo-lectura la
 garantiza el código. `/hostfs` de solo lectura y no recursivo (ADR-038); `/proc/1/net/dev` montado como un único archivo de solo lectura (ADR-046); discos extra en `/disks/<nombre>` de solo lectura (ADR-044). El grupo `docker` se añade
 con `group_add`.
 
-**Secretos.** El token compartido está en archivos con permisos 600, una copia por componente
-(`panel_token` y `agent_token`, ADR-014).
+**Comunicación interna.** Panel y agente se hablan por la red `internal` sin token: el aislamiento es
+la propia red (ADR-051). El GID del socket se escribe en `group_add` (ADR-052).
 
 ## 6.4 Riesgo residual reconocido
 
 - **El socket de Docker sigue dando acceso equivalente a root al agente.** Si se compromete el
-  agente, se compromete el anfitrión. Se reduce con un agente mínimo, sin puertos, no root y con
-  token. Mejora posible (decisión futura, añadiría una dependencia o componente): un proxy del
+  agente, se compromete el anfitrión. Se reduce con un agente mínimo, sin puertos, sin Internet y no root. Mejora posible (decisión futura, añadiría una dependencia o componente): un proxy del
   socket que solo permita lecturas.
+- **Agente sin autenticación:** cualquier contenedor que se conectara a la red `internal` podría consultarlo. Esa red solo debe usarla el panel.
 - **Sesiones y limitador en memoria**, válidos solo para un proceso de uvicorn; se pierden al
   reiniciar el panel. Un atacante no puede provocar ese reinicio.
 - **IP del cliente detrás de un proxy inverso.** El límite usa la IP de la conexión; con un proxy
@@ -59,7 +59,7 @@ con `group_add`.
 - **Contraseña mínima de 4 caracteres** (decisión del equipo). Argon2id y el límite de intentos
   reducen el riesgo, pero es una contraseña débil si el panel se expone a Internet. Recomendación:
   usar una larga.
-- **El panel funciona por HTTP en local.** Con HTTPS hay que poner `SMS_COOKIE_SECURE=true`.
+- **El panel funciona por HTTP.** Con HTTPS hay que poner `SMS_COOKIE_SECURE=true`.
 - **El agente puede leer los archivos de `/hostfs` legibles por todos los usuarios.** Solo se leen
   rutas fijas (`/etc/os-release`, `/etc/hostname` y el disco), pero el montaje es amplio. Mitigado por solo lectura y no root.
 - **Los contenedores comparten el kernel** con el anfitrión.
@@ -89,5 +89,5 @@ con `group_add`.
 | Afectar al servidor real durante el desarrollo | Baja | Muy alto | Desarrollo solo local; ninguna conexión al servidor sin autorización; solo lectura |
 | Diferencias entre CachyOS/Docker 29 y Ubuntu | Media | Medio | Probar primero en una VM Ubuntu o con autorización antes del servidor real |
 | Datos del anfitrión que no coinciden en otro sistema (p. ej. `/etc/os-release` ausente) | Baja | Bajo | El agente devuelve `null` y el panel muestra «No disponible» |
-| Complejidad que el equipo no pueda defender | Baja | Alto | Código acotado (unas 2 500 líneas de `src/`, la mayor parte de interfaz), sin dependencias nuevas |
-| Pendientes de verificación (`verify_dev_env.sh` con el entorno renombrado, servidor real) | Media | Medio | Reejecutar antes de dar la fase por cerrada (ver [07-pruebas.md](07-pruebas.md)) |
+| Complejidad que el equipo no pueda defender | Baja | Alto | Código acotado (788 líneas de Python y unas 1 400 de web), sin dependencias nuevas |
+| Pendiente de verificar en el servidor Ubuntu real | Media | Medio | Probar con autorización expresa (ver [07-pruebas.md](07-pruebas.md)) |

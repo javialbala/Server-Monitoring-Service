@@ -8,7 +8,7 @@
 ## Resumen
 
 El proyecto era una plataforma de monitorización de solo lectura (la renovación del mismo día) con una
-interfaz de tarjetas y un backend que devolvía datos mínimos. Esta fase hace cuatro cosas (y una quinta añadida al final, ver el punto 5):
+interfaz de tarjetas y un backend que devolvía datos mínimos. Esta fase hace cinco cosas:
 
 1. **Renombra** todo a *Server Monitoring Service* (paquete `server_monitor`, componente `panel`,
    variables `SMS_*`).
@@ -16,18 +16,21 @@ interfaz de tarjetas y un backend que devolvía datos mínimos. Esta fase hace c
    todos los contenedores (también los detenidos) y marcas de tiempo con milisegundos.
 3. **Rediseña la interfaz**: tema oscuro sobrio, indicadores circulares, gráficas de líneas en SVG propio
    con histórico de 10 minutos en el navegador, fuentes e iconos autoalojados.
-4. **Limpia el código**: sin carpetas vacías, sin módulos muertos, sin cachés, sin dependencias nuevas.
+4. **Limpia el código**: sin carpetas vacías, módulos muertos ni comentarios innecesarios, sin
+   dependencias nuevas.
+5. **Simplifica el despliegue** (añadido al final de la fase por decisión del usuario): un único
+   `docker-compose.yml` en la raíz para servidor y desarrollo; la contraseña se escribe en el propio
+   archivo (`APP_PASSWORD`, ADR-050); sin token entre panel y agente, aislados por la red interna
+   (ADR-051); agente sin root con el GID del socket visible en el Compose (ADR-052).
 
-5. **Cambia la configuración de la contraseña** (añadido al final de la fase, aprobado por el usuario):
-   se define con la variable `APP_PASSWORD` y se elimina el comando `set-password` (ADR-049).
+Además se **reorganiza toda la documentación** (apartado 5): hay un único `README.md` en la raíz, la de
+las etapas anteriores se archiva en `docs/historico/` (una sola carpeta plana) y la vigente se numera
+de 01 a 11.
 
-Además se **reorganiza toda la documentación** (apartado 5): la de la etapa PaaS se archiva en
-`docs/historico/` y la vigente se numera de 01 a 11.
-
-Cifras: `src/` tiene 2 518 líneas (sin contar fuentes, SVG ni licencias; la renovación tenía 1 492; el
-aumento es el frontend: `charts.js` 216, `dashboard.js` 378, `styles.css` 457); los tests, 950 líneas y
-68 casos tras el cambio de contraseña (antes, 823 líneas y 57 casos); `ruff` sin errores; extremo a extremo 46
-comprobaciones (antes, 32); navegador 22 comprobaciones, todas superadas **en la máquina local** (CachyOS, Docker 29.9.2, Compose 5.6.1).
+Cifras al cerrar la fase: Python en `src/`, 788 líneas (antes de la limpieza, 1 049); web (JS, CSS y
+HTML), 1 394 líneas (antes, 1 484); tests, 725 líneas (antes, 950); scripts, unas 400 (antes, 634); el
+sprite de iconos pasa de 19 a 15 símbolos. Los resultados de las pruebas están en el apartado 9, todos
+**en la máquina local** (CachyOS, Docker 29.9.2, Compose 5.6.1).
 
 ### Decisiones del usuario (todas aprobadas el 2026-11-16)
 
@@ -58,11 +61,15 @@ En todo el informe cada afirmación lleva uno de estos estados:
 | Elemento | Estado | Evidencia o matiz |
 |---|---|---|
 | Renombrado (paquete, variables, Compose, usuarios, cookie...) | **IMPLEMENTADO y PROBADO** | tests, E2E y navegador con los nombres nuevos |
-| Contraseña desde `APP_PASSWORD`: primera instalación, coincide, no coincide, no coincide + reset, falta | **IMPLEMENTADO y PROBADO** | 15 casos de test y 14 comprobaciones nuevas del E2E con Docker real (apartado 9) |
-| La contraseña no aparece en logs, mensajes de error ni en el archivo de hash | **PROBADO** | `caplog` en tests; `docker compose logs panel` y el archivo de hash en el E2E |
-| Contraseña visible con `docker inspect` (variable de entorno) | Riesgo residual **aceptado** | Solo la ve quien ya tiene acceso a Docker; por eso en disco solo hay el hash |
-| `verify_dev_env.sh` con el entorno renombrado | **PROBADO** (antes del cambio de contraseña) | 12/12 OK. **NO VERIFICADO** tras el cambio: no se ejecutó para no tocar el proyecto `sms-dev` |
-| Construcción desde un entorno limpio siguiendo la guía | **PROBADO** | pasos 1–5 de la guía, correcta |
+| Un único `docker-compose.yml` (`docker compose config -q` válido; E2E con un *override* temporal) | **IMPLEMENTADO y PROBADO** | E2E: 46 OK |
+| Contraseña en `APP_PASSWORD` de `docker-compose.yml`: hash Argon2id en memoria; vacía, ausente o inválida → salida con código 1 y mensaje claro sin traceback | **IMPLEMENTADO y PROBADO** | tests de arranque y E2E con Docker real |
+| Cambiar `APP_PASSWORD` + `docker compose up -d`: la nueva da 204 y la antigua 401 | **PROBADO** | E2E |
+| La contraseña no aparece en logs ni en mensajes de error | **PROBADO** | `caplog` en tests; `docker compose logs panel` en el E2E |
+| Contraseña en claro en el Compose y visible con `docker inspect` | Riesgo residual **aceptado** | Solo la ve quien ya tiene acceso al servidor o a Docker (ADR-050) |
+| Sin token: agente solo accesible desde la red interna, no desde el anfitrión y sin salida a Internet | **IMPLEMENTADO y PROBADO** | E2E |
+| Panel sin socket; ningún contenedor como root; raíz de solo lectura; `/hostfs` de solo lectura y sin submontajes | **IMPLEMENTADO y PROBADO** | E2E |
+| Agente sin root (UID 10002) con `group_add` y el GID del socket | **IMPLEMENTADO y PROBADO** | E2E con el GID real del equipo local; en el servidor hay que poner el suyo |
+| Instalación siguiendo el README en el servidor Ubuntu real | **NO VERIFICADO** | solo se probó en CachyOS |
 | Contenedores detenidos visibles y ordenados (en ejecución primero) | **IMPLEMENTADO y PROBADO** | E2E y navegador |
 | Salud deducida del texto de estado | **IMPLEMENTADO y PROBADO** | tests de la conversión |
 | Presentación de «Con fallos» y «Arrancando» en el navegador | **NO VERIFICADO** | el recorrido no incluyó contenedores con *healthcheck* en esos estados |
@@ -84,7 +91,7 @@ En todo el informe cada afirmación lleva uno de estos estados:
 | Sin controles de modificación de contenedores | **IMPLEMENTADO y PROBADO** | tests del agente, `docker events` y navegador |
 | Umbrales de color (CPU 75/90, RAM 80/90, disco 80/90, temperatura 75/90) | **IMPLEMENTADO**; **NO VERIFICADO** como requisito | valores elegidos sin requisito |
 | Paleta: contraste AA y daltonismo | Validada al diseñar; **NO VERIFICADO** automáticamente | |
-| Limpieza de código (vacíos, muertos, cachés) | **IMPLEMENTADO y PROBADO** | `vulture`, `ruff`, `pytest` |
+| Limpieza de código (vacíos, muertos, comentarios y scripts redundantes) | **IMPLEMENTADO y PROBADO** | `ruff`, `pytest`, E2E |
 | CI en GitHub | **NO VERIFICADO** | sin *push*; además excluye integración |
 | Servidor Ubuntu real | **NO VERIFICADO** | solo CachyOS |
 | Consumo de memoria y CPU | **NO VERIFICADO** | |
@@ -102,7 +109,7 @@ Detalle y valores en [../09-interfaz.md](../09-interfaz.md).
 | Estados | — | Normal `#3fb97a`, aviso `#e2a93b`, crítico `#f0645f`, detenido `#6b7480`; siempre con texto además del color | **IMPLEMENTADO** |
 | Series | — | CPU `#3b8beb`, RAM `#d6578a`, bajada `#1fa2ae`, subida `#9085e9`, discos `#a3afbf` | **IMPLEMENTADO** |
 | Tipografía | — | **IBM Plex Sans** (400/500/600) e **IBM Plex Mono** (400/500), autoalojadas | **IMPLEMENTADO y PROBADO** (sin errores de CSP) |
-| Iconos | — | 18 iconos **Lucide** en un *sprite* y la marca propia | **IMPLEMENTADO y PROBADO** |
+| Iconos | — | 14 iconos **Lucide** en un *sprite* y la marca propia (se quitaron cuatro sin uso) | **IMPLEMENTADO y PROBADO** |
 | Indicadores | Tarjetas de métricas | **Indicador circular de 270°** por CPU, RAM y cada disco; «Alto» y «Crítico» también en texto | **IMPLEMENTADO y PROBADO** |
 | Evolución | No había | Dos gráficas de líneas: CPU y RAM, y red (bajada y subida); eje de 1 a 10 min; tooltip; cortes por huecos | **IMPLEMENTADO y PROBADO** (ventana llena: **PENDIENTE**) |
 | Cabecera | — | Marca, *hostname*, estado de conexión (Conectado / Agente sin respuesta / Sin conexión con el panel / Error al actualizar), hora de la última actualización | **IMPLEMENTADO y PROBADO** |
@@ -117,17 +124,17 @@ Todo en `src/server_monitor/panel/web/`. Sin librerías de JavaScript (ADR-047).
 
 | Archivo | Cambio | Estado |
 |---|---|---|
-| `js/charts.js` (216 líneas) | **Nuevo.** `createGauge` (indicador circular con `stroke-dasharray`) y `createLineChart` (gráfica SVG con ejes, rejilla, tooltip, cortes por huecos > 15 s, eje que crece de 1 a 10 min y luego se desplaza, `prefers-reduced-motion`) | **IMPLEMENTADO y PROBADO**; desplazamiento **PENDIENTE** |
-| `js/history.js` (44) | **Nuevo.** 120 muestras en memoria del navegador (10 min); velocidad de red `Δbytes/Δcollected_at`; hueco si un contador baja | **IMPLEMENTADO**; probado indirectamente en navegador (**NO VERIFICADO** el valor numérico) |
-| `js/views/dashboard.js` (378) | **Reescrito.** Indicadores, gráficas, panel Sistema, contenedores; umbrales en `THRESHOLDS`; sondeo cada 5 s con `setTimeout` encadenado y pausa con pestaña oculta | **PROBADO** |
-| `js/format.js` (85) | **Reescrito.** Bytes, velocidad, porcentaje, uptime, fechas, marcas del eje y agrupación de puertos | **IMPLEMENTADO** (sin prueba automática propia) |
-| `js/dom.js` (38) | **Ampliado.** `svg()` y `icon()` además de `el()`; todo texto por `textContent` | **IMPLEMENTADO y PROBADO** |
-| `js/app.js` (51) | Adaptado a la cabecera, que se muestra solo en el panel | **PROBADO** |
-| `js/views/login.js` (64) | Pantalla de login con marca e icono; lógica del formulario igual | **PROBADO** (error de contraseña incorrecta) |
-| `js/api.js` (75), `js/session.js` (37) | Sin cambios de lógica (solo un texto en `api.js`) | **PROBADO** |
+| `js/charts.js` (198 líneas) | **Nuevo.** `createGauge` (indicador circular con `stroke-dasharray`) y `createLineChart` (gráfica SVG con ejes, rejilla, tooltip, cortes por huecos > 15 s, eje que crece de 1 a 10 min y luego se desplaza, `prefers-reduced-motion`) | **IMPLEMENTADO y PROBADO**; desplazamiento **PENDIENTE** |
+| `js/history.js` (38) | **Nuevo.** 120 muestras en memoria del navegador (10 min); velocidad de red `Δbytes/Δcollected_at`; hueco si un contador baja | **IMPLEMENTADO**; probado indirectamente en navegador (**NO VERIFICADO** el valor numérico) |
+| `js/views/dashboard.js` (356) | **Reescrito.** Indicadores, gráficas, panel Sistema, contenedores; umbrales en `THRESHOLDS`; sondeo cada 5 s con `setTimeout` encadenado y pausa con pestaña oculta | **PROBADO** |
+| `js/format.js` (76) | **Reescrito.** Bytes, velocidad, porcentaje, uptime, fechas, marcas del eje y agrupación de puertos | **IMPLEMENTADO** (sin prueba automática propia) |
+| `js/dom.js` (35) | **Ampliado.** `svg()` y `icon()` además de `el()`; todo texto por `textContent` | **IMPLEMENTADO y PROBADO** |
+| `js/app.js` (50) | Adaptado a la cabecera, que se muestra solo en el panel | **PROBADO** |
+| `js/views/login.js` (63) | Pantalla de login con marca e icono; lógica del formulario igual | **PROBADO** (error de contraseña incorrecta) |
+| `js/api.js` (73), `js/session.js` (37) | Sin cambios de lógica | **PROBADO** |
 | `index.html` | Cabecera y precarga de fuentes; sin scripts ni estilos en línea | **PROBADO** (CSP) |
-| `css/styles.css` (457) | **Reescrito**: tokens de color, tipografía, rejilla y puntos de corte | **PROBADO** (scroll horizontal) |
-| `icons.svg`, `icons-LICENSE.txt` | **Nuevos.** Sprite de 18 iconos Lucide y la marca; licencia ISC | **IMPLEMENTADO y PROBADO** |
+| `css/styles.css` (430) | **Reescrito**: tokens de color, tipografía, rejilla y puntos de corte | **PROBADO** (scroll horizontal) |
+| `icons.svg`, `icons-LICENSE.txt` | **Nuevos.** Sprite de 14 iconos Lucide y la marca; licencia ISC | **IMPLEMENTADO y PROBADO** |
 | `fonts/` (5 `woff2` + `OFL.txt`) | **Nuevos.** IBM Plex Sans 400/500/600 e IBM Plex Mono 400/500, SIL OFL 1.1 | **IMPLEMENTADO y PROBADO** |
 | `favicon.svg` | **Nuevo diseño** (la marca) | **IMPLEMENTADO** |
 
@@ -137,44 +144,40 @@ Detalle en [../04-backend.md](../04-backend.md) y [../05-api.md](../05-api.md).
 
 | Cambio | Dónde | Estado |
 |---|---|---|
-| Renombrado `minipaas` → `server_monitor`, `controlplane` → `panel`, `MINIPAAS_*` → `SMS_*`, cookie `sms_session`, logger `server_monitor.access`, secrets `panel_token` y `agent_token` | `src/`, `deploy/`, `scripts/`, `tests/`, `pyproject.toml` | **IMPLEMENTADO y PROBADO** |
+| Renombrado `minipaas` → `server_monitor`, `controlplane` → `panel`, `MINIPAAS_*` → `SMS_*`, cookie `sms_session`, logger `server_monitor.access` | `src/`, `deploy/`, `scripts/`, `tests/`, `pyproject.toml` | **IMPLEMENTADO y PROBADO** |
 | `/metrics`: `disks` (raíz «Sistema» + `/disks/<nombre>`, se omiten los del mismo `st_dev`) | `agent/host_metrics.py` | **IMPLEMENTADO y PROBADO** (extra: **NO VERIFICADO** con disco real) |
 | `/metrics`: `temperature` única (`coretemp` «Package id 0», `k10temp` «Tctl» o `x86_pkg_temp`; `null` si no hay; 0 < t ≤ 150) | `agent/host_metrics.py` | **IMPLEMENTADO y PROBADO** (Intel) |
 | `/metrics`: `network` (contadores acumulados de `/host/net/dev`; se excluyen `lo`, `veth*`, `br-*`, `docker*`, `virbr*`); la velocidad la calcula el navegador | `agent/host_metrics.py` | **IMPLEMENTADO y PROBADO** |
 | `/metrics`: `collected_at` con milisegundos; **se eliminan** `disk` y `temperatures` | `agent/host_metrics.py` | **IMPLEMENTADO y PROBADO** |
 | `/containers`: **todos** los contenedores con `client.api.containers(all=True)`, primero los `running`, `health` deducido del estado | `agent/containers.py` | **IMPLEMENTADO y PROBADO** |
-| Variables nuevas `SMS_DISKS_DIR` (`/disks`) y `SMS_NET_DEV` (`/proc/net/dev`; `/host/net/dev` en Compose) | `agent/config.py`, `compose.dev.yaml` | **IMPLEMENTADO y PROBADO** |
-| Montajes del agente: `/proc/1/net/dev:/host/net/dev:ro` y discos extra opcionales en `/disks/*:ro` | `deploy/compose.dev.yaml` | **PROBADO** `/host/net/dev`; `/disks/*` **NO VERIFICADO** con disco real |
-| Proyecto Compose `sms-dev`, redes `sms-internal`/`sms-public`, volumen `sms-data`, usuarios `sms-panel` (10001) y `sms-agent` (10002) | `deploy/` | **IMPLEMENTADO y PROBADO** (E2E con `sms-e2e`) |
+| Variables nuevas `SMS_DISKS_DIR` (`/disks`) y `SMS_NET_DEV` (`/proc/net/dev`; `/host/net/dev` en Compose) | `agent/config.py`, `docker-compose.yml` | **IMPLEMENTADO y PROBADO** |
+| Montajes del agente: `/proc/1/net/dev:/host/net/dev:ro` y discos extra opcionales en `/disks/*:ro` | `docker-compose.yml` | **PROBADO** `/host/net/dev`; `/disks/*` **NO VERIFICADO** con disco real |
+| Proyecto Compose `server-monitoring`, redes `internal` y `public`, usuarios `sms-panel` (10001) y `sms-agent` (10002) | `docker-compose.yml`, `deploy/` | **IMPLEMENTADO y PROBADO** (E2E con `sms-e2e`) |
 | El panel (Python) **no cambia de comportamiento** al reenviar el JSON del agente; el login y las sesiones tampoco cambian | `panel/` | **PROBADO** (tests) |
-| Contraseña desde `APP_PASSWORD` / `APP_PASSWORD_RESET` (`configure_password`, `write_hash_file` movida a `security/passwords.py`; `build_app_from_env` la llama y sale con `SystemExit(1)` si falla) | `panel/security/passwords.py`, `panel/main.py` | **IMPLEMENTADO y PROBADO** (tests y E2E) |
-| `compose.dev.yaml` exige `APP_PASSWORD` y pasa `APP_PASSWORD_RESET`; `deploy/.env.example` las documenta | `deploy/` | **IMPLEMENTADO y PROBADO** (E2E: `docker compose config` sin la variable falla) |
-| `prepare_dev_env.sh` conserva `deploy/.env` (solo actualiza `DOCKER_GID`, permisos 600, avisa si falta `APP_PASSWORD`) | `scripts/` | **IMPLEMENTADO**; probado sobre una copia temporal, **NO** sobre el `deploy/.env` real |
+| `APP_PASSWORD` en el servicio `panel`: `build_app_from_env` la valida y calcula el hash en memoria; si falla, `SystemExit(1)` | `panel/main.py`, `panel/security/passwords.py` | **IMPLEMENTADO y PROBADO** (tests y E2E) |
+| Se elimina el token entre panel y agente (`common/secrets.py`, `SMS_AGENT_TOKEN_FILE`, `deploy/secrets/`, `tests/test_secrets.py`) | `agent/`, `panel/`, `deploy/` | **IMPLEMENTADO y PROBADO** (E2E: el agente solo se alcanza desde la red interna) |
+| Agente sin root (UID 10002) con `group_add: ["999"]`: el GID real se escribe en el Compose | `docker-compose.yml`, `deploy/Dockerfile.agent` | **IMPLEMENTADO y PROBADO** |
+| `restart: unless-stopped` y comprobaciones de salud en ambos servicios | `docker-compose.yml` | **IMPLEMENTADO y PROBADO** |
 
-Como el volumen cambia de nombre, el primer arranque guarda de nuevo el hash de `APP_PASSWORD`, y hay
-que bajar el entorno antiguo con `docker compose -p minipaas-dev down` (ver la guía).
+### Contraseña y despliegue actuales
 
-### Configuración de la contraseña con `APP_PASSWORD`
+La contraseña se escribe en el servicio `panel` de `docker-compose.yml` (`APP_PASSWORD: ""`). Al
+arrancar, **antes** de crear la aplicación, el panel la valida (4 a 128 caracteres) y calcula su hash
+Argon2id **en memoria**: no hay archivo de hash, ni volumen, ni contraseña por defecto, y la contraseña
+nunca se registra.
 
-El panel lee `APP_PASSWORD` al arrancar, **antes** de crear la aplicación, y guarda solo el hash
-Argon2id en `/data/password_hash` (permisos 600, escritura atómica). No hay contraseña por defecto, y la
-contraseña nunca se guarda ni se registra. Si no se puede continuar, se registra el motivo y el proceso
-termina con `SystemExit(1)` (el contenedor sale con código 1; `uvicorn --factory` no muestra traceback).
-Solo el texto `true` (sin distinguir mayúsculas) activa `APP_PASSWORD_RESET`.
+| Situación | Resultado |
+|---|---|
+| `APP_PASSWORD` válida | Arranque normal |
+| Ausente, vacía o fuera de 4 a 128 caracteres | El panel registra un error claro (sin el valor) y sale con código 1, sin traceback; con `restart: unless-stopped` Docker reintenta y repite el error |
+| Cambiarla | Editar el archivo y ejecutar `docker compose up -d`: se recrea el panel y se cierran las sesiones |
 
-| Situación | Resultado | Log |
-|---|---|---|
-| Primera instalación (sin hash) | Se guarda el hash | INFO «Contraseña inicial configurada a partir de APP_PASSWORD» |
-| Hay hash y coincide | Arranque normal | INFO breve (WARNING si `RESET=true`: puede quitarse) |
-| Hay hash y **no** coincide, sin reset | **No arranca** (código 1) | ERROR: no coincide; añade `APP_PASSWORD_RESET=true` en `deploy/.env`, reinicia y quítala, o restaura el valor anterior |
-| Hay hash, no coincide y `APP_PASSWORD_RESET=true` | Se sustituye el hash | WARNING «Contraseña cambiada por APP_PASSWORD_RESET=true; quita APP_PASSWORD_RESET de deploy/.env» |
-| `APP_PASSWORD` falta, vacía o fuera de 4 a 128 | No arranca | ERROR «Falta APP_PASSWORD: define la contraseña del panel en deploy/.env (ver deploy/.env.example)» o «APP_PASSWORD no es válida…» |
-
-Las sesiones están en memoria: cualquier reinicio, y por tanto cualquier cambio de contraseña, las cierra
-(comprobado en el E2E). El login conserva el 503 si no hay hash (caso defensivo). Riesgo residual: la
-variable es visible con `docker inspect` para quien ya tiene acceso a Docker. Detalle en
-[../04-backend.md](../04-backend.md), [../06-seguridad.md](../06-seguridad.md) y ADR-049 en
-[../10-decisiones.md](../10-decisiones.md).
+El agente no tiene token: solo es alcanzable por la red `internal`, sin puertos y sin salida a Internet.
+Para dar acceso al socket de Docker sin ser root, el servicio `agent` lleva `group_add: ["999"]` y hay
+que poner el GID real (`stat -c %g /var/run/docker.sock`). Detalle en
+[../04-backend.md](../04-backend.md), [../06-seguridad.md](../06-seguridad.md) y las ADR-050 a 052 en
+[../10-decisiones.md](../10-decisiones.md). Riesgo residual: la contraseña está en claro en el Compose
+del servidor y se ve con `docker inspect`.
 
 ## 4. Archivos y módulos eliminados, con sus motivos
 
@@ -185,9 +188,13 @@ variable es visible con `docker inspect` para quien ya tiene acceso a Docker. De
 | Campo `disk` y lista `temperatures` de `/metrics` | Sustituidos por `disks` (varios discos) y `temperature` (una sola); mantenerlos duplicaría datos |
 | Antiguo código de lectura de todas las `thermal_zone*` | Sustituido por la lectura del paquete del procesador (ADR-045) |
 | Antiguas tarjetas y CSS de la interfaz | Sustituidos por el rediseño |
-| `panel/manage.py` y el comando `set-password` (con sus 3 tests y las referencias en scripts y documentación vigente) | Sustituidos por `APP_PASSWORD` (ADR-049): una sola forma de configurar la contraseña. `write_hash_file` se conserva, movida a `security/passwords.py`. Un `grep` no encuentra ya `set-password` fuera de `docs/historico/`, las entradas antiguas del `CHANGELOG`, ADR-039 (donde figura como sustituido) y este informe |
+| Código no necesario: comentarios redundantes y código muerto | Python pasa de 1 049 a 788 líneas, web de 1 484 a 1 394, tests de 950 a 725 y scripts de 634 a unas 400; se quitan 4 iconos sin uso del sprite (quedan 15 símbolos) |
+| `deploy/compose.dev.yaml`, `deploy/.env`, `deploy/.env.example`, `deploy/secrets/` | Sustituidos por el único `docker-compose.yml` de la raíz (ADR-052) |
+| `scripts/prepare_dev_env.sh` y `scripts/verify_dev_env.sh` | Ya no hace falta preparar secretos ni GID por script; las comprobaciones de aislamiento se fusionaron en `scripts/e2e_monitor.sh` |
+| `src/server_monitor/common/` y `tests/test_secrets.py` | Era la lectura del token compartido, retirado (ADR-051) |
+| `panel/manage.py`, el comando `set-password`, `APP_PASSWORD_RESET`, el archivo de hash y el volumen `/data` | Sustituidos por `APP_PASSWORD` en el Compose con hash en memoria (ADR-050) |
 | Nombres `minipaas`, `controlplane`, `MINIPAAS_*`, `Dockerfile.controlplane`, `requirements/controlplane.txt`, extra `controlplane` | Renombrados (ADR-042); no quedan en el código vigente |
-| **Ningún módulo Python muerto** | `vulture --min-confidence 80` sin resultados. Las clases CSS «sin uso» que señaló eran generadas dinámicamente: **no** se eliminaron |
+| Clases CSS «sin uso» que señaló una herramienta de código muerto | **No** se eliminaron: eran generadas dinámicamente |
 
 No se añadió ni eliminó ninguna dependencia (apartado 8).
 
@@ -201,34 +208,31 @@ Los movimientos se hicieron con `git mv` (se conserva el historial).
 
 | Documento | Cambio |
 |---|---|
-| `README.md` (raíz) | Reescrito para el proyecto actual; arranque rápido con `APP_PASSWORD` |
+| `README.md` (raíz) | **Único README del repositorio**: qué es, qué es una PaaS y cómo encaja, instalación en un servidor, arquitectura y seguridad, desarrollo |
 | `CHANGELOG.md` | Entrada nueva; las anteriores se conservan con los nombres de su época |
-| `docs/README.md` | Índice nuevo y aviso sobre `historico/` |
 | `docs/01-vision-y-alcance.md` | Objetivo y alcance actuales; evolución en un apartado; **absorbe el roadmap** (siguientes pasos) |
-| `docs/02-requisitos.md` | Solo requisitos vigentes, con estado de verificación actualizado (RF-M16, M24, M25, M33 y RNF-M15 nuevos) |
+| `docs/02-requisitos.md` | Solo requisitos vigentes, con estado de verificación actualizado (RF-M16, M24, M25, M33 y RNF-M15 nuevos; sin token ni archivo de hash) |
 | `docs/03-arquitectura.md` | Actualizado; **absorbe la estructura del proyecto** |
 | `docs/04-backend.md` | **Nuevo.** Módulos, origen de cada métrica, contenedores, secuencias, autenticación, permisos y variables |
 | `docs/05-api.md` | Antes `api.md`; contrato v2 con ejemplos JSON y códigos de error |
 | `docs/06-seguridad.md` | Antes `04-seguridad.md`; amenazas y medidas actuales (T9, T9b y T9c sobre la contraseña) |
 | `docs/07-pruebas.md` | Fusiona la estrategia (antes `05-estrategia-pruebas.md`) y el registro vigente |
-| `docs/08-guia-desarrollo.md` | Antes `guia-desarrollo.md`; instalación desde cero, disco extra, migración desde `minipaas-dev` |
+| `docs/08-guia-desarrollo.md` | Antes `guia-desarrollo.md`; reducida a lo específico de desarrollo (la instalación está en el README) |
 | `docs/09-interfaz.md` | **Nuevo.** Decisiones de diseño y componentes JavaScript |
-| `docs/10-decisiones.md` | Antes `decisiones.md`; solo ADR vigentes, más **ADR-042 a 049** (ADR-049: contraseña desde `APP_PASSWORD`; ADR-039 marcada como revisada) |
+| `docs/10-decisiones.md` | Antes `decisiones.md`; solo ADR vigentes, más **ADR-042 a 052** (050: contraseña en el Compose con hash en memoria; 051: sin token; 052: un único Compose). ADR-014 y ADR-049 pasan al histórico como sustituidas; ADR-039 queda revisada |
 | `docs/11-estado-del-arte.md` | Solo herramientas de monitorización comparables |
 | `docs/bibliografia.md` | Ampliada: IBM Plex, Lucide, `@fontsource`, `proc(5)`, hwmon, thermal, API de Docker, `statvfs`, MDN y WCAG; etapa PaaS en sección propia. La sección «Uso de herramientas de IA» **no se ha tocado** |
-| `docs/informes/renovacion-monitorizacion.md` | Se conserva; se añade al principio una nota sobre el renombrado |
+| `docs/historico/renovacion-monitorizacion.md` | Informe de la renovación, movido (`git mv`) al histórico con una nota sobre el renombrado |
 | `docs/informes/rediseno-interfaz-limpieza.md` | Este informe |
 
 ### Archivados en `docs/historico/`
 
 | Archivo | Origen |
 |---|---|
-| `historico/README.md` | Nuevo: qué contiene, por qué se conserva y cómo se relaciona con el proyecto actual |
-| `historico/informes/fase-00.md`, `fase-01.md`, `fase-02.md` | `git mv` desde `docs/informes/` (con un aviso al principio) |
-| `historico/decisiones-etapa-paas.md` | ADR sustituidas (002, 005, 007 a 012, 016 a 018, 020, 022, 023) con su texto original, extraídas de `decisiones.md` |
-| `historico/arquitectura-etapa-paas.md` | Resumen de la arquitectura PaaS (antes, apartado 3.8 de la arquitectura) |
-| `historico/requisitos-etapa-paas.md` | Requisitos RF-01 a RF-73 y su correspondencia (antes, apartados 2.3 y 2.4) |
-| `historico/roadmap-etapa-paas.md` | `git mv` de `06-roadmap.md` con el roadmap PaaS (la situación y fases siguientes vigentes pasan a `01-vision-y-alcance.md`) |
+| `historico/fase-00.md`, `fase-01.md`, `fase-02.md` | `git mv` desde `docs/informes/` (con un aviso al principio) |
+| `historico/renovacion-monitorizacion.md` | `git mv` desde `docs/informes/` |
+| `historico/etapa-paas.md` | Fusiona la arquitectura, los requisitos y el roadmap de la etapa PaaS, e incluye el «por qué se conserva» y el índice de la carpeta |
+| `historico/decisiones-etapa-paas.md` | ADR sustituidas (002, 005, 007 a 012, 014, 016 a 018, 020, 022, 023, 049) con su texto original |
 | `historico/estado-del-arte-etapa-paas.md` | `git mv` de `07-estado-del-arte.md`, sin el apartado de monitorización |
 | `historico/registro-pruebas-etapa-paas.md` | `git mv` de `registro-pruebas.md`, solo las Fases 0 a 2 |
 
@@ -236,9 +240,11 @@ Los movimientos se hicieron con `git mv` (se conserva el historial).
 
 | Archivo | Motivo |
 |---|---|
-| `docs/08-estructura-proyecto.md` (`git rm`) | Duplicado: su contenido (el árbol de carpetas) está en `03-arquitectura.md`, apartado 3.7, actualizado |
+| `docs/08-estructura-proyecto.md` | Duplicado: su contenido (el árbol de carpetas) está en `03-arquitectura.md`, apartado 3.7 |
+| `docs/README.md` y `docs/historico/README.md` | Solo hay un README, el de la raíz; el índice de `historico/` está en la cabecera de `historico/etapa-paas.md` |
+| `docs/historico/arquitectura-etapa-paas.md`, `requisitos-etapa-paas.md`, `roadmap-etapa-paas.md` | Fusionados en `historico/etapa-paas.md` |
 
-Los apartados con la renovación del registro de pruebas pasaron a `07-pruebas.md` (apartado 7.7). Las
+El registro de pruebas de las etapas anteriores se resume en `07-pruebas.md` (apartado 7.7). Las
 ADR 025 a 035 (Fase 3) solo existen en la rama `fase-03-motor-despliegue`; la nota correspondiente está en
 `10-decisiones.md`.
 

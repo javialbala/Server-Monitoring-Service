@@ -50,11 +50,11 @@ actualizarse.
 
 ### Iconos y marca
 
-18 iconos de **Lucide** (`lucide-static@1.68.0`, licencia ISC; texto en `web/icons-LICENSE.txt`)
+14 iconos de **Lucide** (`lucide-static@1.68.0`, licencia ISC; texto en `web/icons-LICENSE.txt`)
 agrupados en un *sprite* `web/icons.svg` y usados con `<use href="/icons.svg#nombre">`: `server`,
-`cpu`, `memory-stick`, `hard-drive`, `thermometer`, `clock`, `arrow-down`, `arrow-up`, `box`, `layers`,
-`log-out`, `lock-keyhole`, `triangle-alert`, `activity`, `network`, `monitor`, `container` y
-`circle-alert`. Son decorativos (`aria-hidden`): el significado siempre va en texto. La **marca** es
+`cpu`, `memory-stick`, `hard-drive`, `thermometer`, `clock`, `arrow-down`, `arrow-up`, `layers`,
+`log-out`, `lock-keyhole`, `triangle-alert`, `monitor` y `circle-alert` (más la marca: 15 símbolos en
+total; en la limpieza se quitaron cuatro sin uso). Son decorativos (`aria-hidden`): el significado siempre va en texto. La **marca** es
 propia (símbolo `logo` del sprite): un arco de 270° con un punto central, que repite el indicador
 circular; el mismo dibujo es el `favicon.svg`.
 
@@ -119,15 +119,15 @@ nombre del servidor y se reducen los indicadores.
 
 | Módulo | Líneas | Qué hace |
 |---|---|---|
-| `app.js` | 51 | Arranque: consulta la sesión y muestra login o panel (y la cabecera solo en el panel); el 401 de cualquier llamada lleva al login |
-| `api.js` | 75 | Cliente `fetch` (JSON, `credentials: same-origin`, cabecera CSRF, manejo del 401); solo cambió el nombre en un mensaje |
-| `session.js` | 37 | Estado de sesión en memoria y `load`/`login`/`logout` (sin cambios) |
-| `dom.js` | 38 | `el()` crea elementos HTML con `textContent`; `svg()` crea elementos SVG; `icon()` inserta un icono del sprite |
-| `format.js` | 85 | Formato de bytes (KiB, MiB...), velocidad, porcentaje, tiempo encendido, fechas, y **agrupación de puertos IPv4/IPv6** |
-| `history.js` | 44 | Histórico en memoria y cálculo de la velocidad de red |
-| `charts.js` | 216 | `createGauge` (indicador circular) y `createLineChart` (gráfica de líneas) |
-| `views/login.js` | 64 | Pantalla de contraseña con la marca y el icono de candado (la lógica del formulario no cambia) |
-| `views/dashboard.js` | 378 | Pantalla del panel y ciclo de actualización |
+| `app.js` | 50 | Arranque: consulta la sesión y muestra login o panel (y la cabecera solo en el panel); el 401 de cualquier llamada lleva al login |
+| `api.js` | 73 | Cliente `fetch` (JSON, `credentials: same-origin`, cabecera CSRF, manejo del 401) |
+| `session.js` | 37 | Estado de sesión en memoria y `load`/`login`/`logout` |
+| `dom.js` | 35 | `el()` crea elementos HTML con `textContent`; `svg()` crea elementos SVG; `icon()` inserta un icono del sprite |
+| `format.js` | 76 | Formato de bytes (KiB, MiB...), velocidad, porcentaje, tiempo encendido, fechas, y **agrupación de puertos IPv4/IPv6** |
+| `history.js` | 38 | Histórico en memoria y cálculo de la velocidad de red |
+| `charts.js` | 198 | `createGauge` (indicador circular) y `createLineChart` (gráfica de líneas) |
+| `views/login.js` | 63 | Pantalla de contraseña con la marca y el icono de candado |
+| `views/dashboard.js` | 356 | Pantalla del panel y ciclo de actualización |
 
 ### `history.js`
 
@@ -164,7 +164,7 @@ temperatura) y `createContainers` (tabla). Las filas de contenedores se generan 
 (`127.0.0.1:8080 → 80/tcp`); los no publicados no se listan («Sin publicar»).
 
 El ciclo de actualización (cada 5 s, `setTimeout` encadenado, pausa con la pestaña oculta, parada al
-cerrar sesión) está en [04-backend.md](04-backend.md), apartado 4.6.
+cerrar sesión) está en [04-backend.md](04-backend.md), apartado 4.5.
 
 ## 9.3 Estado de lo implementado y probado
 

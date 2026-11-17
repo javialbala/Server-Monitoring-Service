@@ -1,6 +1,6 @@
 # 10. Decisiones técnicas (ADR)
 
-> Estado: **actualizado en la fase de rediseño de interfaz y limpieza (2026-11-16)**. Aquí están las
+> Estado: **actualizado tras simplificar el despliegue (2026-11-16)**. Aquí están las
 > decisiones **vigentes**, con su número original. Las que quedaron sustituidas están en
 > [historico/decisiones-etapa-paas.md](historico/decisiones-etapa-paas.md).
 
@@ -22,7 +22,7 @@ indica con la etiqueta **Revisada**.
 | 007 a 009, 011, 012, 023 | Aplicaciones, redes, despliegues, *rollback*, *worker*, estado de aplicación | Sustituidas por ADR-036 | Histórico |
 | 010 | Autenticación con un único administrador | Sustituida en parte por ADR-039 | Histórico |
 | 013 | `uv` y `uv.lock` en desarrollo, CI e imágenes | Aceptada (revisada) | Aquí |
-| 014 | Token compartido como *secret* de archivo, una copia 600 por componente | Aceptada (revisada) | Aquí |
+| 014 | Token compartido como *secret* de archivo, una copia 600 por componente | Sustituida por ADR-051 | [Histórico](historico/decisiones-etapa-paas.md) |
 | 015 | Python 3.12 en imágenes y CI | Aceptada | Aquí |
 | 016, 017, 020, 022 | Migraciones, conexiones SQLite, administrador inicial, auditoría en BD | Sustituidas por ADR-039 | Histórico |
 | 018 | Sesiones con el identificador guardado como hash | Sustituida en parte por ADR-039 | Histórico |
@@ -32,10 +32,13 @@ indica con la etiqueta **Revisada**.
 | 025 a 035 | Motor de despliegue (Fase 3) | No aprobadas; sustituidas por ADR-036 | Solo en la rama `fase-03-motor-despliegue` |
 | 036 a 041 | Renovación: monitorización de solo lectura | Aceptadas | Aquí |
 | 042 a 048 | Rediseño de interfaz y limpieza | Aceptadas (2026-11-16) | Aquí |
-| 049 | Contraseña desde `APP_PASSWORD` con confirmación explícita de cambios | Aceptada (2026-11-16) | Aquí |
+| 049 | Contraseña desde `APP_PASSWORD` con confirmación explícita de cambios | Sustituida por ADR-050 | [Histórico](historico/decisiones-etapa-paas.md) |
+| 050 | Contraseña en `docker-compose.yml` con hash en memoria | Aceptada (2026-11-16) | Aquí |
+| 051 | Sin token entre panel y agente: aislamiento por red interna | Aceptada (2026-11-16) | Aquí |
+| 052 | Un único `docker-compose.yml` en la raíz para servidor y desarrollo | Aceptada (2026-11-16) | Aquí |
 
-> **Dónde están las ADR que no están aquí.** Las sustituidas (002, 005, 007 a 012, 016 a 018, 020,
-> 022, 023) están completas en el histórico. Las ADR 025 a 035 pertenecen a la Fase 3, que no se
+> **Dónde están las ADR que no están aquí.** Las sustituidas (002, 005, 007 a 012, 014, 016 a 018, 020,
+> 022, 023, 049) están completas en el histórico. Las ADR 025 a 035 pertenecen a la Fase 3, que no se
 > aprobó: su texto solo existe en la rama `fase-03-motor-despliegue`, y sus números no se reutilizan.
 
 ---
@@ -108,27 +111,6 @@ instalar `uv` en la imagen (una herramienta más sin necesidad).
 dependencias hay que ejecutar `scripts/export_requirements.sh`. La imagen base `python:3.12-slim` se
 referencia por etiqueta, no por *digest*: se fijará antes del despliegue final.
 
-### ADR-014 · Token compartido como *secret* de archivo, una copia 600 por componente (revisada)
-
-**Contexto.** El panel y el agente comparten un token. Debe llegar a ambos sin quedar expuesto.
-
-**Decisión.** *Secret* de Compose (archivo en `/run/secrets/`), no variable de entorno (visible con
-`docker inspect` y heredada por procesos hijos). Los procesos leen la ruta de
-`SMS_AGENT_TOKEN_FILE`, exigen al menos 32 caracteres y **no arrancan** si falta. El agente compara
-con `hmac.compare_digest` y responde igual si el token falta o es incorrecto.
-
-**Permisos.** Sin Swarm, Compose monta cada *secret* con el propietario y los permisos del archivo del
-host e **ignora** `uid`, `gid` y `mode` (verificado con Compose 5.6.1). Por eso `scripts/prepare_dev_env.sh`
-crea **una copia del mismo token por componente**: `deploy/secrets/panel_token` (propietario UID
-10001) y `deploy/secrets/agent_token` (UID 10002), ambas con permisos 600 y el directorio con 700.
-Cambiar el propietario requiere root en el host; el script usa un contenedor efímero sin red que solo
-escribe esos dos archivos (quien usa Docker ya tiene un acceso equivalente a root). Alternativas
-descartadas: `644` en un directorio `700` (legible por «otros»), `640` con grupo compartido, mismo UID
-para ambos (pierde la separación) y un contenedor de arranque como root.
-
-**Consecuencias.** Cada archivo solo lo lee el proceso que lo necesita, ni siquiera el usuario del
-host. `scripts/verify_dev_env.sh` comprueba permisos y lectura con el UID de cada contenedor.
-
 ### ADR-015 · Python 3.12 en imágenes y CI
 
 `python:3.12-slim` en las imágenes, Python 3.12 en el CI y en el `.venv` local (`requires-python >=
@@ -144,8 +126,7 @@ prueba es lo que se ejecuta.
 iteraciones, 64 MiB de memoria, perfil de RFC 9106). Es el algoritmo recomendado por OWASP. No se
 implementa criptografía propia y la biblioteca estándar no incluye Argon2.
 
-**Revisión (2026-11-16).** Ya no hay usuarios ni base de datos: se guarda un único hash en
-`/data/password_hash` (ADR-039). Una verificación usa unos 64 MiB durante una fracción de segundo;
+**Revisión (2026-11-16).** Ya no hay usuarios ni base de datos: se usa un único hash (ADR-039, ADR-050: en memoria). Una verificación usa unos 64 MiB durante una fracción de segundo;
 aceptable con un solo administrador y con el limitador de intentos (ADR-024).
 
 ### ADR-021 · CSRF con token sincronizador por sesión + comprobación de `Origin` (revisada)
@@ -200,7 +181,7 @@ aplicaciones.
 ### ADR-037 · Agente separado y de solo lectura; el socket `:ro` no limita la API (revisada)
 
 **Estado:** Aceptada (2026-11-16). Revisada el 2026-11-16 por ADR-043 (la consulta incluye los
-contenedores detenidos).
+contenedores detenidos) y por ADR-051 (el agente ya no exige token: lo aísla la red interna).
 
 **Contexto.** Leer la lista de contenedores exige el socket de Docker, que equivale a root en el
 anfitrión; el panel está expuesto al navegador.
@@ -210,7 +191,7 @@ equivalente a root. (b) Dos procesos: panel sin socket y agente interno con sock
 
 **Decisión.** Opción (b). El **panel** (`server_monitor.panel`) no tiene el socket, no es root, con
 `read_only`, `cap_drop: ALL` y `no-new-privileges`. El **agente** (`server_monitor.agent`) está en una
-red interna sin puertos publicados, exige un token Bearer en todas las rutas, solo ofrece rutas `GET`
+red interna sin puertos publicados, solo ofrece rutas `GET`
 y solo hace dos consultas a Docker: `client.api.containers(all=True)` (lista) y `client.version()`
 (comprobación de salud). No ejecuta comandos ni es privilegiado.
 
@@ -243,14 +224,15 @@ prohíbe montar `/` **con escritura**; este montaje no escribe y no es recursivo
 ### ADR-039 · Sin SQLite: hash de la contraseña en un archivo y sesiones en memoria
 
 **Estado:** Aceptada (2026-11-16). Sustituye a ADR-005, 016, 017, 020 y 022, y en parte a ADR-010 y 018.
-**Revisada por ADR-049:** la contraseña ya no se establece con `manage set-password` (la orden se ha
-eliminado) sino con la variable `APP_PASSWORD`; el hash en archivo y las sesiones en memoria no cambian.
+**Revisada por ADR-050:** la contraseña ya no se establece con `manage set-password` ni se guarda su
+hash en un archivo: se escribe en `docker-compose.yml` (`APP_PASSWORD`) y el hash vive solo en memoria.
+Las sesiones en memoria no cambian. El texto de abajo es el original de esta ADR.
 
 **Alternativas.** (a) SQLite para una sola fila. (b) Hash Argon2id en un archivo. (c) Contraseña en una
 variable de entorno (queda en `docker inspect`).
 
 **Decisión.** Opción (b). El hash está en `/data/password_hash` (volumen `sms-data`, permisos 600) y se
-crea el propio panel al arrancar (originalmente con `manage set-password`, **sustituido por ADR-049**). Contraseña
+crea el propio panel al arrancar (originalmente con `manage set-password`, **sustituido por ADR-050**, que elimina también el archivo). Contraseña
 única de 4 a 128 caracteres, sin usuario. Las sesiones viven en la memoria del proceso: se pierden
 al reiniciar el panel. Los accesos se registran con `logging` (`server_monitor.access`) sin
 contraseñas. Del diseño anterior se conserva guardar solo el SHA-256 del identificador de sesión.
@@ -306,14 +288,12 @@ Las siete decisiones siguientes se tomaron con la aprobación del usuario el 202
 **Decisión.** Opción (b). Nombre del proyecto **Server Monitoring Service** (abreviatura `SMS`);
 paquete `minipaas` → `server_monitor`; `controlplane` → `panel`; variables `MINIPAAS_*` → `SMS_*`;
 Dockerfile y requisitos `controlplane` → `panel`; extra de `pyproject.toml` `controlplane` → `panel`;
-servicio Compose `panel`; proyecto Compose `sms-dev`, redes `sms-internal` y `sms-public`, volumen
-`sms-data`; secrets `panel_token` y `agent_token`; cookie `sms_session`; logger
+servicio Compose `panel`; proyecto Compose `sms-dev` (luego `server-monitoring`, ADR-052), redes
+`sms-internal` y `sms-public` (luego `internal` y `public`); cookie `sms_session`; logger
 `server_monitor.access`; usuarios de las imágenes `sms-panel` (UID 10001) y `sms-agent` (UID 10002).
 
-**Consecuencias.** Todo el código y la documentación vigente usan los nombres nuevos. Al cambiar el
-nombre del volumen, el primer arranque vuelve a guardar el hash de `APP_PASSWORD` (ADR-049). Si existía el entorno antiguo,
-hay que bajarlo (`docker compose -p minipaas-dev down`), que además libera el puerto 8000. Los
-documentos históricos conservan los nombres de su época.
+**Consecuencias.** Todo el código y la documentación vigente usan los nombres nuevos. Los documentos históricos conservan los nombres de su época. Si existía el entorno antiguo
+(`minipaas-dev`), hay que bajarlo (`docker compose -p minipaas-dev down`) para liberar el puerto 8000.
 
 ### ADR-043 · Contenedores detenidos visibles con la misma llamada de lectura
 
@@ -344,7 +324,7 @@ no debe ver todos los discos del anfitrión: ampliaría lo que puede leer.
 el administrador declare en Compose qué discos se ven.
 
 **Decisión.** Opción (b). Cada disco extra se monta **en solo lectura** en `/disks/<nombre>`
-(p. ej. `- /mnt/datos:/disks/datos:ro` en `compose.dev.yaml`). El agente mide el raíz (nombre
+(p. ej. `- /mnt/datos:/disks/datos:ro` en `docker-compose.yml`). El agente mide el raíz (nombre
 «Sistema») y cada subdirectorio de `SMS_DISKS_DIR`, ordenado por nombre; omite los que están en el
 mismo sistema de archivos que el raíz (mismo `st_dev`), para no repetir el mismo disco.
 
@@ -437,41 +417,64 @@ Actualizar una fuente o un icono es una operación manual.
 
 ---
 
-## Configuración de la contraseña (2026-11-16)
+## Despliegue simplificado (2026-11-16)
 
-### ADR-049 · Contraseña desde `APP_PASSWORD` con confirmación explícita de cambios
+### ADR-050 · Contraseña en `docker-compose.yml` con hash en memoria
 
-**Estado:** Aceptada (2026-11-16, aprobada por el usuario). **Sustituye** a la parte de ADR-039 que
-decía que la contraseña se establece con `manage set-password`.
+**Estado:** Aceptada (2026-11-16, decisión del usuario). **Sustituye** a ADR-049 y a lo que aplicaba
+de ADR-039 (hash en archivo y volumen `/data`).
 
-**Contexto.** Con `set-password` había un paso manual tras `up` (y hasta entonces el login respondía
-503). Se quiere que el despliegue se configure en un solo sitio (`deploy/.env`) y sin contraseñas por
-defecto.
+**Contexto.** ADR-049 exigía `deploy/.env`, un archivo de hash, un volumen y una variable de
+confirmación para cambiar la contraseña: demasiadas piezas para algo que debe entenderse de un vistazo.
 
-**Alternativas.** (a) Mantener `set-password`. (b) `APP_PASSWORD` que sobrescribe el hash en cada
-arranque: un error al editar `.env` cambiaría la contraseña sin que nadie lo note. (c) `APP_PASSWORD`
-con confirmación explícita (`APP_PASSWORD_RESET=true`) para cambiar una contraseña ya configurada.
+**Alternativas.** (a) Mantener ADR-049. (b) Contraseña en un archivo `.env` aparte. (c) Contraseña
+visible y editable en el propio `docker-compose.yml`, con el hash calculado solo en memoria.
 
-**Decisión.** Opción (c). Al arrancar, `build_app_from_env` llama a `configure_password`
-(`panel/security/passwords.py`):
+**Decisión.** Opción (c). El servicio `panel` lleva `APP_PASSWORD: ""` en `docker-compose.yml`. Al
+arrancar, `build_app_from_env` la valida (4 a 128 caracteres) y calcula su hash Argon2id **en
+memoria**. Si falta, está vacía o no es válida, registra un error claro (sin el valor) y sale con
+código 1; con `restart: unless-stopped` Docker reintenta y repite el error. Cambiarla es editar el
+archivo y ejecutar `docker compose up -d`, que recrea el panel y cierra las sesiones. Se eliminan el
+archivo de hash, el volumen `/data`, `APP_PASSWORD_RESET` y el comando `set-password`.
 
-| Situación | Resultado |
-|---|---|
-| Primera instalación (sin hash) | Guarda el hash Argon2id (permisos 600, escritura atómica); INFO |
-| Hay hash y coincide | Arranque normal; INFO (con `RESET=true`, además WARNING: puede quitarse) |
-| Hay hash y no coincide | **El panel no arranca** (código 1) con un mensaje que explica cómo cambiarla |
-| Hay hash, no coincide y `APP_PASSWORD_RESET=true` | Sustituye el hash; WARNING para quitar la variable |
-| `APP_PASSWORD` ausente, vacía o fuera de 4 a 128 caracteres | No arranca; mensaje claro sin el valor |
+**Consecuencias.** Un solo lugar de configuración y nada en disco. Riesgo aceptado: la contraseña está
+en claro en el `docker-compose.yml` del servidor y se ve con `docker inspect` (quien lo ve ya tiene
+acceso a Docker); no hay que subir ese archivo con la contraseña a un repositorio público.
 
-Solo el texto `true` (sin distinguir mayúsculas) confirma un cambio. Se **elimina** `manage.py` y su
-orden `set-password`. `compose.dev.yaml` exige la variable (`${APP_PASSWORD:?...}`) y la lee de
-`deploy/.env` (no versionado, permisos 600), nunca del YAML. El login mantiene el 503 si no hay hash
-(defensivo: no debería ocurrir).
+### ADR-051 · Sin token entre panel y agente: aislamiento por red interna
 
-**Consecuencias.** Un solo sitio de configuración y ninguna contraseña por defecto. Solo se guarda el
-hash en disco y la contraseña no aparece en logs ni en mensajes de error. Cualquier reinicio del panel,
-y por tanto cualquier cambio de contraseña, cierra todas las sesiones (están en memoria). **Riesgo
-residual aceptado** (era el argumento en contra en ADR-039): una variable de entorno se ve con
-`docker inspect` para quien ya tiene acceso a Docker, que equivale a root en el anfitrión; por eso solo
-se guarda el hash y `deploy/.env` debe tener permisos 600. Si el arranque falla por una contraseña
-distinta, el contenedor no queda sano y hay que leer `docker compose logs panel`.
+**Estado:** Aceptada (2026-11-16, decisión del usuario). **Sustituye** a ADR-014 (token compartido).
+
+**Contexto.** El token obligaba a secretos de archivo con una copia por componente y propietarios
+distintos, y a un script de preparación del entorno con un contenedor efímero. Era mucha maquinaria
+para proteger un servicio que ya no es alcanzable desde fuera.
+
+**Alternativas.** (a) Mantener el token. (b) Confiar en el aislamiento de red.
+
+**Decisión.** Opción (b). El agente no publica puertos, la red `internal` tiene `internal: true` (sin
+salida a Internet) y solo el panel está en ella. Solo se exponen rutas `GET` de lectura. Se eliminan el
+token, `SMS_AGENT_TOKEN_FILE`, `deploy/secrets/` y `common/secrets.py`.
+
+**Consecuencias.** Menos código y ningún secreto que preparar. El E2E comprueba que el agente solo
+responde desde la red interna, que no es accesible desde el anfitrión y que no tiene salida a Internet.
+Riesgo residual: cualquier contenedor que se conectara a la red `internal` podría consultar al agente
+(solo lectura); por eso solo debe usarla el panel.
+
+### ADR-052 · Un único `docker-compose.yml` en la raíz para servidor y desarrollo
+
+**Estado:** Aceptada (2026-11-16, decisión del usuario).
+
+**Contexto.** Había un Compose de desarrollo (`deploy/compose.dev.yaml`), un `.env` generado por
+scripts y otro script de verificación: el servidor real y el desarrollo se instalaban de forma distinta.
+
+**Decisión.** Un único `docker-compose.yml` en la raíz (`name: server-monitoring`, servicios `panel` y
+`agent`, redes `internal` y `public`, `restart: unless-stopped`) sirve para instalar en un servidor y
+para desarrollar. El agente corre sin root (UID 10002) y accede al socket con `group_add: ["999"]`, donde
+`999` se cambia por el GID real del servidor (`stat -c %g /var/run/docker.sock`), visible en el propio
+archivo. Se eliminan `deploy/compose.dev.yaml`, `deploy/.env*`, `deploy/secrets/`,
+`scripts/prepare_dev_env.sh` y `scripts/verify_dev_env.sh` (sus comprobaciones se fusionaron en
+`scripts/e2e_monitor.sh`). La instalación es: clonar, editar dos valores y `docker compose up -d --build`.
+
+**Consecuencias.** Menos archivos y un solo camino. Las pruebas E2E usan un *override* temporal (con
+`!override`, Compose 2.24 o superior) en lugar de modificar el archivo. Quien edita `APP_PASSWORD` y el
+GID modifica un archivo versionado: no debe confirmar esos cambios con la contraseña real.

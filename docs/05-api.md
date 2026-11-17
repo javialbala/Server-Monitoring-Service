@@ -7,7 +7,7 @@
 Hay dos APIs: la del **panel** (la ve el navegador) y la **interna del agente** (solo la ve el panel).
 Ninguna tiene `/docs`, `/redoc` ni `/openapi.json`. No existe ninguna ruta que modifique Docker.
 
-## 5.1 API del panel (puerto 8000; en desarrollo `http://127.0.0.1:8000`)
+## 5.1 API del panel (puerto 8000; `http://IP-DEL-SERVIDOR:8000`)
 
 ### Convenciones
 
@@ -28,7 +28,7 @@ Ninguna tiene `/docs`, `/redoc` ni `/openapi.json`. No existe ninguna ruta que m
 |---|---|---|
 | `GET /api/health` | pública | 200 `{"status": "ok"}` (la usa el *healthcheck* del contenedor) |
 | `GET /api/session` | pública | 200 `{"authenticated": bool, "csrf_token": str \| null}` |
-| `POST /api/login` | pública | 204 + cookie · 401 `Contraseña incorrecta` · 422 · 429 + `Retry-After` · 503 `No hay contraseña configurada` · 403 `Origin` ajeno |
+| `POST /api/login` | pública | 204 + cookie · 401 `Contraseña incorrecta` · 422 · 429 + `Retry-After`· 403 `Origin` ajeno |
 | `POST /api/logout` | sesión + CSRF | 204 · 401 sin sesión · 403 sin token CSRF o `Origin` ajeno |
 | `GET /api/metrics` | sesión | 200 (JSON del agente, tal cual) · 401 `Sesión no iniciada o caducada` · 502 `El agente no responde` |
 | `GET /api/containers` | sesión | 200 (JSON del agente, tal cual) · 401 · 502 `El agente no responde` |
@@ -48,12 +48,11 @@ creación.
 | 422 | Cuerpo del login inválido (vacío, más de 128 caracteres o con campos de más) |
 | 429 | Demasiados intentos fallidos (cabecera `Retry-After` en segundos) |
 | 502 | El agente no responde, devuelve un error o un JSON inválido (también cuando Docker falla) |
-| 503 | Login sin hash de contraseña guardado (caso defensivo: el panel exige `APP_PASSWORD` al arrancar, así que no debería ocurrir) |
 
 ## 5.2 API interna del agente (puerto 8001, solo en la red interna)
 
-Todas las rutas son `GET` y exigen `Authorization: Bearer <token>`: 401 `No autorizado` si falta o es
-incorrecto, sin distinguir cuál.
+Todas las rutas son `GET` y **no tienen autenticación**: el agente solo es alcanzable desde la red
+`internal` de Compose, sin puertos publicados (ADR-051).
 
 ### `GET /health`
 

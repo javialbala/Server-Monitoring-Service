@@ -5,7 +5,7 @@ corresponden con las fases del proyecto y con la renovación.
 
 > Las entradas anteriores a «Rediseño de interfaz y limpieza» conservan los nombres de su época
 > (`MiniPaaS`, `minipaas`, `controlplane`, `MINIPAAS_*`); esas etapas están archivadas en
-> [docs/historico/](docs/historico/README.md).
+> [docs/historico/](docs/historico/etapa-paas.md).
 
 ## [Rediseño de interfaz y limpieza] — 2026-11-16 (pendiente de aprobación)
 

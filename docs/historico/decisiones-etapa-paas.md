@@ -6,6 +6,8 @@
 > nombres `minipaas`, `controlplane`, `MINIPAAS_*` son los de su época) porque explican por qué el
 > proyecto es como es. Las decisiones vigentes están en [../10-decisiones.md](../10-decisiones.md).
 > Las ADR 025 a 035 (motor de despliegue, Fase 3) solo existen en la rama `fase-03-motor-despliegue`.
+> Al final se añaden dos ADR de la etapa posterior (ADR-014 y ADR-049), sustituidas al simplificar el
+> despliegue.
 
 | ADR | Tema | Sustituida por |
 |---|---|---|
@@ -17,12 +19,15 @@
 | 010 | Autenticación con un único administrador y sesiones en servidor | En parte, ADR-039 |
 | 011 | Despliegue *recreate* con restauración; *rollback* de aplicación, no de datos | ADR-036 |
 | 012 | Ejecución en segundo plano con un *worker* `asyncio` interno | ADR-036 |
+| 014 | Token compartido como *secret* de archivo, una copia 600 por componente | ADR-051 (sin token; aislamiento por red interna) |
 | 016 | Migraciones propias: archivos SQL numerados y tabla de versiones | ADR-039 |
 | 017 | Conexiones SQLite por petición, transacciones explícitas y WAL | ADR-039 |
 | 018 | Sesiones en servidor con el identificador guardado como hash | En parte, ADR-039 (se conserva el hash; sesiones en memoria) |
 | 020 | Administrador inicial creado por CLI explícita e idempotente | ADR-039 (`set-password`) |
 | 022 | Auditoría transaccional con metadatos filtrados | ADR-039 (registro en log) |
 | 023 | Estado lógico en tabla de códigos; slug inmutable; borrado definitivo | ADR-036 |
+
+| 049 | Contraseña desde `APP_PASSWORD` con confirmación explícita de cambios | ADR-050 (contraseña en `docker-compose.yml`, hash en memoria) |
 
 ### Historial de aprobaciones de la Fase 0
 
@@ -337,3 +342,69 @@ contenedores (`minipaas-<slug>-…`): cambiarlo obligaría a renombrar recursos 
 **Borrado.** Definitivo (no lógico): en esta fase una aplicación no tiene recursos asociados que
 limpiar, y el evento de auditoría conserva el rastro. La Fase 3 revisará el borrado cuando haya
 contenedores y volúmenes (relacionado con RF-19).
+
+---
+
+## Decisiones sustituidas el 2026-11-16 al simplificar el despliegue
+
+Estas dos ADR no son de la etapa PaaS, sino de la etapa anterior a la simplificación del despliegue
+(rediseño de interfaz y limpieza). Se conservan con su texto original, que menciona `deploy/.env`,
+`prepare_dev_env.sh`, `compose.dev.yaml` y el volumen `sms-data`, ya eliminados.
+
+### ADR-014 · Token compartido como *secret* de archivo, una copia 600 por componente (sustituida por ADR-051)
+
+**Contexto.** El panel y el agente comparten un token. Debe llegar a ambos sin quedar expuesto.
+
+**Decisión.** *Secret* de Compose (archivo en `/run/secrets/`), no variable de entorno (visible con
+`docker inspect` y heredada por procesos hijos). Los procesos leen la ruta de
+`SMS_AGENT_TOKEN_FILE`, exigen al menos 32 caracteres y **no arrancan** si falta. El agente compara
+con `hmac.compare_digest` y responde igual si el token falta o es incorrecto.
+
+**Permisos.** Sin Swarm, Compose monta cada *secret* con el propietario y los permisos del archivo del
+host e **ignora** `uid`, `gid` y `mode` (verificado con Compose 5.6.1). Por eso `scripts/prepare_dev_env.sh`
+crea **una copia del mismo token por componente**: `deploy/secrets/panel_token` (propietario UID
+10001) y `deploy/secrets/agent_token` (UID 10002), ambas con permisos 600 y el directorio con 700.
+Cambiar el propietario requiere root en el host; el script usa un contenedor efímero sin red que solo
+escribe esos dos archivos (quien usa Docker ya tiene un acceso equivalente a root). Alternativas
+descartadas: `644` en un directorio `700` (legible por «otros»), `640` con grupo compartido, mismo UID
+para ambos (pierde la separación) y un contenedor de arranque como root.
+
+**Consecuencias.** Cada archivo solo lo lee el proceso que lo necesita, ni siquiera el usuario del
+host. `scripts/verify_dev_env.sh` comprueba permisos y lectura con el UID de cada contenedor.
+
+### ADR-049 · Contraseña desde `APP_PASSWORD` con confirmación explícita de cambios (sustituida por ADR-050)
+
+**Estado:** Aceptada (2026-11-16, aprobada por el usuario). **Sustituye** a la parte de ADR-039 que
+decía que la contraseña se establece con `manage set-password`.
+
+**Contexto.** Con `set-password` había un paso manual tras `up` (y hasta entonces el login respondía
+503). Se quiere que el despliegue se configure en un solo sitio (`deploy/.env`) y sin contraseñas por
+defecto.
+
+**Alternativas.** (a) Mantener `set-password`. (b) `APP_PASSWORD` que sobrescribe el hash en cada
+arranque: un error al editar `.env` cambiaría la contraseña sin que nadie lo note. (c) `APP_PASSWORD`
+con confirmación explícita (`APP_PASSWORD_RESET=true`) para cambiar una contraseña ya configurada.
+
+**Decisión.** Opción (c). Al arrancar, `build_app_from_env` llama a `configure_password`
+(`panel/security/passwords.py`):
+
+| Situación | Resultado |
+|---|---|
+| Primera instalación (sin hash) | Guarda el hash Argon2id (permisos 600, escritura atómica); INFO |
+| Hay hash y coincide | Arranque normal; INFO (con `RESET=true`, además WARNING: puede quitarse) |
+| Hay hash y no coincide | **El panel no arranca** (código 1) con un mensaje que explica cómo cambiarla |
+| Hay hash, no coincide y `APP_PASSWORD_RESET=true` | Sustituye el hash; WARNING para quitar la variable |
+| `APP_PASSWORD` ausente, vacía o fuera de 4 a 128 caracteres | No arranca; mensaje claro sin el valor |
+
+Solo el texto `true` (sin distinguir mayúsculas) confirma un cambio. Se **elimina** `manage.py` y su
+orden `set-password`. `compose.dev.yaml` exige la variable (`${APP_PASSWORD:?...}`) y la lee de
+`deploy/.env` (no versionado, permisos 600), nunca del YAML. El login mantiene el 503 si no hay hash
+(defensivo: no debería ocurrir).
+
+**Consecuencias.** Un solo sitio de configuración y ninguna contraseña por defecto. Solo se guarda el
+hash en disco y la contraseña no aparece en logs ni en mensajes de error. Cualquier reinicio del panel,
+y por tanto cualquier cambio de contraseña, cierra todas las sesiones (están en memoria). **Riesgo
+residual aceptado** (era el argumento en contra en ADR-039): una variable de entorno se ve con
+`docker inspect` para quien ya tiene acceso a Docker, que equivale a root en el anfitrión; por eso solo
+se guarda el hash y `deploy/.env` debe tener permisos 600. Si el arranque falla por una contraseña
+distinta, el contenedor no queda sano y hay que leer `docker compose logs panel`.

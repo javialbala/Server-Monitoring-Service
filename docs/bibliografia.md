@@ -103,7 +103,7 @@ modificado su contenido.
 |---|---|---|---|---|
 | **IBM Plex Sans** (400, 500, 600; `woff2` latino) | Tipografía del texto | SIL Open Font License 1.1, © IBM Corp. | Paquete `@fontsource/ibm-plex-sans@5.2.8`, descargado de https://cdn.jsdelivr.net/npm/@fontsource/ibm-plex-sans@5.2.8/ | `web/fonts/OFL.txt` |
 | **IBM Plex Mono** (400, 500; `woff2` latino) | Cifras, nombres de imagen, ejes | SIL Open Font License 1.1, © IBM Corp. | Paquete `@fontsource/ibm-plex-mono@5.2.7`, descargado de https://cdn.jsdelivr.net/npm/@fontsource/ibm-plex-mono@5.2.7/ | `web/fonts/OFL.txt` |
-| **Lucide** (18 iconos reunidos en un *sprite* `icons.svg`) | Iconos de la interfaz | ISC | Paquete `lucide-static@1.68.0`, descargado de https://unpkg.com/lucide-static@1.68.0/icons/ | `web/icons-LICENSE.txt` |
+| **Lucide** (14 iconos reunidos en un *sprite* `icons.svg`) | Iconos de la interfaz | ISC | Paquete `lucide-static@1.68.0`, descargado de https://unpkg.com/lucide-static@1.68.0/icons/ | `web/icons-LICENSE.txt` |
 | Marca «Server Monitoring Service» (arco de 270°, `logo` y `favicon.svg`) | Marca y favicon | Obra propia del proyecto | — | — |
 
 - IBM. *IBM Plex*. https://github.com/IBM/plex · SIL. *Open Font License 1.1*.
@@ -116,7 +116,7 @@ compatible. Cuando se incorpore una dependencia o un recurso, se añadirá aquí
 
 ## Etapa PaaS (histórico, ya no se usa)
 
-Fuentes de las Fases 0 a 3 (contexto en [historico/](historico/README.md)):
+Fuentes de las Fases 0 a 3 (contexto en [historico/](historico/etapa-paas.md)):
 
 - SQLite. *Documentation*, *Write-Ahead Logging* y *Foreign Key Support*. https://www.sqlite.org/docs.html
 - Chart.js. *Documentation* (previsto y no usado: ver ADR-047). https://www.chartjs.org/docs/

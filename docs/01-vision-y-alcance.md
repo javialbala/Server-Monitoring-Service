@@ -1,8 +1,8 @@
 # 1. Visión y alcance
 
-> Estado del documento: **actualizado en la fase de rediseño de interfaz y limpieza (2026-11-16)**.
+> Estado del documento: **actualizado tras simplificar el despliegue (2026-11-16)**.
 > Describe el proyecto tal como es hoy. La historia (de PaaS a monitorización) está resumida en el
-> apartado 1.6 y archivada en [historico/](historico/README.md).
+> apartado 1.6 y archivada en [historico/](historico/etapa-paas.md).
 
 ## 1.1 Problema
 
@@ -38,7 +38,7 @@ explicado y demostrado por el equipo.
 | Contenedores | Lista de **todos**: nombre, imagen, estado, salud, puertos, creación, proyecto y servicio de Compose |
 | Gráficas | Evolución de CPU, RAM y red de los últimos 10 minutos, en el navegador |
 | Actualización | Consulta automática cada 5 s, con pausa si la pestaña no está visible |
-| Seguridad | Agente de solo lectura aislado, token, Argon2id, límite de intentos, CSRF, CSP |
+| Seguridad | Agente de solo lectura aislado en una red interna, Argon2id, límite de intentos, CSRF, CSP |
 
 ### Fuera del alcance (decisión consciente)
 
@@ -84,8 +84,8 @@ objetivo a monitorización de solo lectura (ADR-036) por ser más sencillo, segu
 fase de **rediseño de interfaz y limpieza** (misma fecha) renombró el proyecto a Server Monitoring
 Service, amplió el backend (discos, temperatura, red, contenedores detenidos), rediseñó la interfaz y
 limpió el código. La documentación de la etapa PaaS se conserva en
-[historico/](historico/README.md); los informes de cada etapa, en
-[informes/renovacion-monitorizacion.md](informes/renovacion-monitorizacion.md) y
+[historico/](historico/etapa-paas.md); los informes de cada etapa, en
+[historico/renovacion-monitorizacion.md](historico/renovacion-monitorizacion.md) y
 [informes/rediseno-interfaz-limpieza.md](informes/rediseno-interfaz-limpieza.md).
 
 ## 1.7 Situación actual y siguientes pasos
@@ -94,15 +94,15 @@ limpió el código. La documentación de la etapa PaaS se conserva en
 |---|---|
 | Fases 0 a 2 (PaaS) | Aprobadas; se conservan como etapa anterior |
 | Fase 3 (motor de despliegue) | Rama `fase-03-motor-despliegue`, **no aprobada**, intacta |
-| Renovación: plataforma de monitorización | Terminada (informe en `informes/`) |
-| **Rediseño de interfaz y limpieza** | **Terminada en local, pendiente de aprobación** (rama `rediseno-interfaz-limpieza`) |
+| Renovación: plataforma de monitorización | Terminada (informe en [historico/](historico/renovacion-monitorizacion.md)) |
+| **Rediseño de interfaz, limpieza y despliegue simplificado** | **Terminada en local, pendiente de aprobación** (rama `rediseno-interfaz-limpieza`) |
 
 Siguientes pasos recomendados (propuestos, no aprobados):
 
 | Paso | Contenido | Criterio de aceptación |
 |---|---|---|
-| **A. Cierre de pendientes de la fase actual** | Ejecutar `verify_dev_env.sh` con el entorno renombrado y construir desde un entorno limpio siguiendo la guía; comprobar la ventana de 10 minutos llena en el navegador | Resultados anotados en [07-pruebas.md](07-pruebas.md) |
-| **B. Despliegue en el servidor Ubuntu real** (solo con autorización expresa) | Probar antes en Ubuntu o una VM; decidir HTTPS y `SMS_COOKIE_SECURE`; guía de instalación; medir consumo | Funciona sin afectar a los servicios existentes; consumo medido |
+| **A. Cierre de pendientes de la fase actual** | Instalar desde un clon limpio siguiendo el README; comprobar la ventana de 10 minutos llena en el navegador | Resultados anotados en [07-pruebas.md](07-pruebas.md) |
+| **B. Despliegue en el servidor Ubuntu real** (solo con autorización expresa) | Probar antes en Ubuntu o una VM; decidir HTTPS y `SMS_COOKIE_SECURE`; medir consumo (la guía de instalación ya está en el README) | Funciona sin afectar a los servicios existentes; consumo medido |
 | **C. Cierre académico** | Memoria, presentación y cuestionario de la asignatura | Documentación completa |
 
 Posibles mejoras posteriores, no planificadas: proxy del socket de Docker que solo permita lecturas,

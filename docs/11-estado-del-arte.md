@@ -26,3 +26,11 @@ muestra en una sola pantalla el anfitrión (CPU, RAM, discos, temperatura, red) 
 también los creados fuera de ella y los detenidos. No pretende competir en funcionalidad con las
 herramientas anteriores, que son más completas: renuncia a las alertas, al historial persistente y a
 cualquier acción de escritura.
+
+## 11.3 Plataformas PaaS autoalojadas
+
+Este proyecto no compite con las PaaS autoalojadas (Dokku, Coolify, CapRover, Dokploy), que **despliegan
+y gestionan aplicaciones**; él solo **observa** el servidor y sus contenedores. Pueden complementarse:
+si la PaaS acepta un `docker-compose.yml` y da acceso al socket Docker del anfitrión, se puede
+desplegar este servicio sobre ella. Qué es una PaaS y cómo encaja el proyecto: ver el
+[README](../README.md), apartado «Qué es una PaaS».

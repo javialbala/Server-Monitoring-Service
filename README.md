@@ -10,7 +10,7 @@ Trabajo de la asignatura *Gestión de Sistemas de Archivos y Servicios Distribui
 > **todavía no se ha probado en el servidor Ubuntu real**. Informe:
 > [docs/informes/rediseno-interfaz-limpieza.md](docs/informes/rediseno-interfaz-limpieza.md). El
 > proyecto empezó como una PaaS (MiniPaaS) y cambió de objetivo el 2026-11-16; esa etapa está archivada
-> en [docs/historico/](docs/historico/README.md).
+> en [docs/historico/](docs/historico/etapa-paas.md).
 
 ## ¿Qué es?
 

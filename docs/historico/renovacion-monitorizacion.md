@@ -1,5 +1,8 @@
 # Informe de cierre — Renovación: plataforma de monitorización de solo lectura
 
+> **Informe histórico: etapa de la renovación (2026-11-16), posterior a la etapa PaaS y anterior al
+> rediseño.** No describe el sistema actual (ver el [README](../../README.md)).
+>
 > **Nota posterior (2026-11-16).** Este informe describe la etapa de la renovación y conserva los nombres
 > de entonces. En la fase siguiente (rediseño de interfaz y limpieza) se renombraron el paquete
 > `minipaas` → `server_monitor`, `controlplane` → `panel`, las variables `MINIPAAS_*` → `SMS_*` y el
@@ -8,8 +11,9 @@
 > `04-seguridad.md` → `06-seguridad.md`, `05-estrategia-pruebas.md` y `registro-pruebas.md` →
 > `07-pruebas.md`, `07-estado-del-arte.md` → `11-estado-del-arte.md`, `08-estructura-proyecto.md` →
 > `03-arquitectura.md`, `06-roadmap.md` → `01-vision-y-alcance.md` y `historico/`). Ver el
-> [informe de esa fase](rediseno-interfaz-limpieza.md). Además, la contraseña dejó de establecerse con
-> `set-password` (comando eliminado): ahora se define con `APP_PASSWORD` (ADR-049).
+> [informe de esa fase](../informes/rediseno-interfaz-limpieza.md). Además, la contraseña dejó de establecerse con
+> `set-password` (comando eliminado): ahora se escribe en `APP_PASSWORD` de `docker-compose.yml`
+> (ADR-050), y el token entre panel y agente se retiró (ADR-051).
 
 > Informe autocontenido para la memoria universitaria y la presentación.
 > Proyecto: **MiniPaaS** (nombre histórico) — plataforma web ligera de monitorización y consulta.

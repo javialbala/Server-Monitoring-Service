@@ -3,7 +3,7 @@
 > Estado del documento: **actualizado en la fase de rediseño de interfaz y limpieza (2026-11-16)**.
 > Solo requisitos vigentes. Los identificadores `RF-M..` y `RNF-M..` (M de monitorización) no se
 > confunden con los de la etapa PaaS, archivados en
-> [historico/requisitos-etapa-paas.md](historico/requisitos-etapa-paas.md).
+> [historico/etapa-paas.md](historico/etapa-paas.md).
 >
 > Prioridad (MoSCoW): **M** = imprescindible, **S** = debería, **C** = podría.
 > Estado: **Verificado** = hay una prueba ejecutada con resultado real (ver [07-pruebas.md](07-pruebas.md));
@@ -17,8 +17,8 @@
 | ID | Requisito | Prioridad | Estado |
 |---|---|---|---|
 | RF-M01 | El panel y los datos exigen iniciar sesión con una contraseña única (4–128 caracteres). | M | Verificado |
-| RF-M02 | La contraseña se establece con la variable de entorno `APP_PASSWORD` (4–128 caracteres), sin valor por defecto: sin ella el panel no arranca. En disco solo se guarda su hash y nunca se registra. | M | Verificado (tests y E2E con Docker real) |
-| RF-M05 | Cambiar una contraseña ya configurada exige confirmarlo con `APP_PASSWORD_RESET=true`; un valor distinto sin confirmación impide arrancar y el mensaje explica cómo proceder. | M | Verificado (tests y E2E con Docker real) |
+| RF-M02 | La contraseña se escribe en `APP_PASSWORD` del servicio `panel` de `docker-compose.yml` (4–128 caracteres), sin valor por defecto: si falta, está vacía o no es válida, el panel no arranca (código 1) y el log lo explica. Solo se calcula su hash en memoria; nada se guarda en disco y nunca se registra. | M | Verificado (tests y E2E con Docker real) |
+| RF-M05 | Cambiar la contraseña consiste en editar `APP_PASSWORD` y ejecutar `docker compose up -d`; la antigua deja de valer y las sesiones abiertas se cierran. | M | Verificado (tests y E2E con Docker real) |
 | RF-M03 | El usuario puede cerrar sesión; la sesión caduca a los 30 min de inactividad y a las 8 h como máximo. | M | Verificado (caducidad con reloj simulado) |
 | RF-M04 | Los accesos (correctos, fallidos, bloqueos, cierres) se registran sin contraseñas. | S | Implementado; sin prueba automática del contenido del registro |
 
@@ -65,17 +65,17 @@
 | ID | Categoría | Requisito | Cómo se verifica | Estado |
 |---|---|---|---|---|
 | RNF-M01 | Seguridad | El panel (expuesto al navegador) no tiene el socket de Docker. | E2E: el panel no ve el socket | Verificado |
-| RNF-M02 | Seguridad | El agente solo tiene rutas `GET`, exige token Bearer en todas y solo consulta a Docker `containers(all=True)` y `version`. | Tests del agente | Verificado |
-| RNF-M03 | Seguridad | Ningún contenedor propio es privilegiado, usa root, ni capabilities; sistema de archivos de solo lectura; `no-new-privileges`. | `compose.dev.yaml`; `verify_dev_env.sh` (12 comprobaciones) | Verificado (12/12 OK con el entorno renombrado) |
+| RNF-M02 | Seguridad | El agente solo tiene rutas `GET`, no tiene puertos publicados ni salida a Internet (solo lo alcanza el panel, por la red interna) y solo consulta a Docker `containers(all=True)` y `version`. | Tests del agente y E2E (agente inaccesible desde el anfitrión y sin Internet) | Verificado |
+| RNF-M03 | Seguridad | Ningún contenedor propio es privilegiado, usa root, ni capabilities; sistema de archivos de solo lectura; `no-new-privileges`. | `docker-compose.yml`; E2E (`e2e_monitor.sh`) | Verificado |
 | RNF-M04 | Seguridad | Los montajes del anfitrión (`/hostfs`, `/host/net/dev`, `/disks/*`) son de solo lectura; `/hostfs` sin submontajes. | E2E | Verificado `/hostfs`; `/host/net/dev` se comprobó en un contenedor efímero (se leen las interfaces reales) y en el E2E; `/disks/*` sin probar con un disco real |
 | RNF-M05 | Seguridad | Contraseña con Argon2id; cookie `HttpOnly`, `SameSite=Strict`, `Secure` configurable; límite de 5 fallos en 15 min por IP. | Tests del panel y E2E | Verificado |
 | RNF-M06 | Seguridad | CSRF por sesión en el cierre de sesión y comprobación de `Origin` en métodos no seguros. | Tests del panel y E2E | Verificado |
 | RNF-M07 | Seguridad | CSP `default-src 'self'` sin recursos externos (fuentes e iconos autoalojados), sin `innerHTML` con datos del servidor, sin `/docs`. | Test de cabeceras; navegador sin errores de CSP; revisión del JS | Verificado |
-| RNF-M08 | Mantenibilidad | Código sencillo y pequeño, comentarios en español, sin librerías de JavaScript y sin dependencias nuevas de Python. | `ruff`; `node --check`; revisión | Verificado |
-| RNF-M09 | Mantenibilidad | Pruebas automáticas suficientes y rápidas. | `uv run pytest` (68 tests) | Verificado |
+| RNF-M08 | Mantenibilidad | Código sencillo y pequeño (788 líneas de Python), comentarios en español, sin librerías de JavaScript y sin dependencias nuevas de Python. | `ruff`; `node --check`; revisión | Verificado |
+| RNF-M09 | Mantenibilidad | Pruebas automáticas suficientes y rápidas. | `uv run pytest` (51 tests) | Verificado |
 | RNF-M10 | Rendimiento | Una consulta de métricas tarda del orden de 0,5 s (medición de CPU). | Diseño (ADR-040); sin medición formal | Pendiente de medir |
 | RNF-M11 | Rendimiento | **Objetivo de diseño:** consumo bajo de RAM y CPU. Sin cifra verificada. | Medir con `docker stats` | Pendiente |
-| RNF-M12 | Portabilidad | Funciona con `docker compose up` en Linux con Docker Engine 25 o superior (API 1.44). | Probado en CachyOS; **no** en Ubuntu | Parcial |
+| RNF-M12 | Portabilidad | Funciona con `docker compose up -d --build` en Linux con Docker Engine 25 o superior (API 1.44). | Probado en CachyOS; **no** en Ubuntu | Parcial |
 | RNF-M13 | Aislamiento del entorno | El desarrollo y las pruebas no tocan el servidor real. | Procedimiento | Cumplido |
 | RNF-M14 | Usabilidad | Interfaz clara, adaptable a pantallas estrechas (sin scroll horizontal a 1024 y 390 px), con mensajes de error en español. | Navegador (`e2e_ui.py`) | Verificado en 1024 y 390 px |
 | RNF-M15 | Accesibilidad | Estado nunca solo por color, foco visible, `prefers-reduced-motion`; información de las gráficas disponible también como texto. | Revisión del CSS y JS | Parcial: implementado y revisado; el **tooltip no es accesible por teclado** (los valores actuales están en la leyenda) y no hay auditoría automática |
@@ -83,4 +83,4 @@
 ## 2.3 Requisitos retirados de la etapa PaaS
 
 Los requisitos de la etapa PaaS (RF-01 a RF-73 y RNF-01 a RNF-17) ya no son vigentes: ver
-[historico/requisitos-etapa-paas.md](historico/requisitos-etapa-paas.md).
+[historico/etapa-paas.md](historico/etapa-paas.md).
