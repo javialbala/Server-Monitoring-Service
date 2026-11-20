@@ -16,11 +16,11 @@
 | **API del panel** | Login, cookie, 429, CSRF, `Origin`, caducidad de sesión, 401, 502, cabeceras y arranque con `APP_PASSWORD` | `pytest` + `TestClient`, agente falso | No | Siempre |
 | **Integración** | Agente contra Docker real: contenedor ajeno detectado, detenido incluido, métricas coherentes | `pytest -m integration` (3 tests) | Sí | Local (el CI las excluye) |
 | **Extremo a extremo** | Sistema completo en un proyecto Compose aparte (`sms-e2e`): contraseña, aislamiento, métricas frente al anfitrión, contenedores, solo lectura, sesión, bloqueo | `bash scripts/e2e_monitor.sh` (46 comprobaciones) | Sí | Local |
-| **Navegador** | Recorrido del panel real con Chromium: indicadores frente a la API, gráficas, tooltip, pausa, responsive, logout, consola | `scripts/e2e_ui.py` con Playwright vía `uvx` (22 comprobaciones) | Sí | Local |
+| **Navegador** | Recorrido del panel real con Chromium: KPIs frente a la API, Docker Details, tablas, `View All`, pausa, responsive, logout y consola | `scripts/e2e_ui.py` con Playwright vía `uvx` | Sí | Local |
 | **Estilo y sintaxis** | Formato, errores comunes y reglas de seguridad (`S`); sintaxis de los módulos JavaScript | `ruff check`, `ruff format --check`, `node --check` | No | Siempre |
 
 No hay pruebas automáticas del JavaScript aparte de `node --check` (sintaxis) y el recorrido en
-navegador: la lógica de `history.js` y de `format.js` se ejercita solo a través de él.
+navegador: la lógica de `format.js` y del renderizado se ejercita solo a través de él.
 
 ## 7.2 Cómo se prueba cada parte
 
@@ -36,7 +36,7 @@ navegador: la lógica de `history.js` y de `format.js` se ejercita solo a travé
 | CSRF | Logout sin token → 403, `Origin` ajeno → 403 |
 | `APP_PASSWORD` | Ausente, vacía, corta o larga → el arranque sale con `SystemExit(1)` sin escribir la contraseña en el log (`caplog`); login 204 con la configurada y 401 con otra. En el E2E: sin contraseña el panel sale con código 1 y lo explica sin traceback; la contraseña no está en los logs; cambiarla y ejecutar `up -d` da 204 con la nueva y 401 con la antigua |
 | Aislamiento | En el E2E: el agente responde solo desde la red interna, no desde el anfitrión y sin salida a Internet; el panel no tiene el socket; ningún contenedor corre como root; raíz de solo lectura; `/hostfs` de solo lectura y sin submontajes |
-| Navegador | Número y arco de los indicadores = API, un indicador por disco, una temperatura, filas = contenedores, detenidos marcados, sin botones de modificación, ≥ 3 muestras en gráficas, tooltip, pausa, sin scroll horizontal, logout, sin errores de consola/CSP |
+| Navegador | KPIs = API, Docker Details con versión y totales, tablas de contenedores e imágenes, `View All`, sin botones de modificación, pausa, sin scroll horizontal, logout, sin errores de consola/CSP |
 
 ## 7.3 Reglas de las pruebas con Docker
 
@@ -57,7 +57,7 @@ navegador: la lógica de `history.js` y de `format.js` se ejercita solo a travé
 | `tests/panel/test_startup.py` | Arranque con `APP_PASSWORD` inválida (sin escribirla en el log) y login con la configurada |
 | `tests/panel/test_api.py` | Rutas protegidas, reenvío al agente, 502, estáticos con CSP |
 | `scripts/e2e_monitor.sh` | 46 comprobaciones de extremo a extremo (incluye contraseña y aislamiento) |
-| `scripts/e2e_ui.py` | 22 comprobaciones en navegador |
+| `scripts/e2e_ui.py` | 29 comprobaciones en navegador |
 
 ## 7.5 Integración continua
 
@@ -78,7 +78,7 @@ Entorno: máquina local CachyOS, Docker 29.9.2, Compose 5.6.1, rama `rediseno-in
 | S.3 | Suite completa | `uv run pytest -q` | **51 passed**, 1 aviso (deprecación de httpx en el `TestClient` de Starlette; no es un fallo) |
 | S.4 | Validez del Compose | `docker compose config -q` | Válido |
 | S.5 | Extremo a extremo con Docker real | `bash scripts/e2e_monitor.sh` | **46 OK**, «E2E correcto.» |
-| S.6 | Recorrido en navegador | `scripts/e2e_ui.py` en un proyecto Compose aislado | **22 OK**, «UI correcta.» |
+| S.6 | Recorrido en navegador | `scripts/e2e_ui.py` en un proyecto Compose aislado | **29 OK**, «UI correcta.» |
 
 El script del E2E usa un archivo *override* temporal con `!override` (requiere Compose 2.24 o superior)
 para fijar la contraseña de prueba, un puerto local y el GID del socket sin tocar `docker-compose.yml`.
@@ -92,11 +92,11 @@ SO, disco raíz, red sin `lo`/`veth`/`docker`, temperatura); contenedores ajenos
 detenidos y con el mismo número que `docker ps -a`; sesión y CSRF; 429 tras 5 fallos incluso con la
 contraseña correcta; las consultas no generan eventos de modificación en `docker events`.
 
-**Qué comprueba el navegador (22):** error con contraseña incorrecta; número y arco de CPU y RAM iguales
-a los de la API; un indicador por disco; una sola temperatura general; filas de contenedores iguales a
-la API y detenidos marcados; sin botones de modificación; la hora de actualización cambia sola; al menos
-3 muestras en las gráficas; tooltip; pausa con la pestaña oculta (se **simula** con `visibilitychange`);
-sin scroll horizontal a 1024 y 390 px; logout; sin errores de JavaScript ni de CSP en la consola.
+**Qué comprueba el navegador (29):** error con contraseña incorrecta; los cuatro KPIs con sus valores,
+notas y barras; versión de Docker; totales de contenedores e imágenes; filas de las tablas; badges de
+estado; sin botones de modificación; `View All`; la hora de actualización cambia sola; pausa con la
+pestaña oculta (se **simula** con `visibilitychange`); sin scroll horizontal a 1024 y 390 px; logout;
+sin errores de JavaScript ni de CSP en la consola.
 
 ### Pendiente de ejecutar o de comprobar
 
@@ -104,8 +104,8 @@ sin scroll horizontal a 1024 y 390 px; logout; sin errores de JavaScript ni de C
 |---|---|
 | Servidor Ubuntu real (instalación siguiendo el README) | Sin autorización; solo se probó en CachyOS |
 | CI en GitHub | Sin *push* |
-| Desplazamiento de la gráfica con la ventana de 10 min llena | Requiere 10 min reales en el navegador |
-| Tooltip en pantalla táctil | No probado |
+| Selector de entorno y navegación no disponibles | Solo visual; no abren menús ni cambian de pantalla |
+| Fidelidad pixel a pixel con la imagen de referencia | El modelo de desarrollo no puede leer imágenes |
 | Consumo de memoria y CPU; contraste y daltonismo automatizados | No medidos |
 
 ## 7.7 Registros anteriores

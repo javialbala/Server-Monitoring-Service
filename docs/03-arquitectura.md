@@ -37,10 +37,10 @@ Navegador ──HTTP──▶ Panel ──HTTP por la red interna──▶ Agent
 
 | Pieza | Responsabilidad | Privilegios |
 |---|---|---|
-| **Navegador** | Muestra el panel, repite la consulta cada 5 s, guarda el histórico de 10 min y calcula la velocidad de red | — |
-| **Panel** (`server_monitor.panel`) | Contraseña, sesiones, CSRF, límite de intentos, cabeceras de seguridad, archivos estáticos y reenvío de `/api/metrics` y `/api/containers` al agente | Sin socket Docker. UID 10001, `read_only`, `cap_drop: ALL`, `no-new-privileges`. Nada escribible salvo `/tmp` (tmpfs) |
-| **Agente** (`server_monitor.agent`) | Lee métricas del anfitrión y la lista de contenedores | Único con el socket. UID 10002, mismas restricciones. Red interna sin puertos publicados ni salida a Internet. Solo lecturas |
-| **Docker Engine** | Fuente de la lista de contenedores | — |
+| **Navegador** | Muestra KPIs, Docker Details y tablas; repite la consulta cada 5 s | — |
+| **Panel** (`server_monitor.panel`) | Contraseña, sesiones, CSRF, límite de intentos, cabeceras de seguridad, archivos estáticos y reenvío de `/api/metrics`, `/api/containers`, `/api/images` y `/api/docker` al agente | Sin socket Docker. UID 10001, `read_only`, `cap_drop: ALL`, `no-new-privileges`. Nada escribible salvo `/tmp` (tmpfs) |
+| **Agente** (`server_monitor.agent`) | Lee métricas del anfitrión, contenedores, imágenes y estado de Docker | Único con el socket. UID 10002, mismas restricciones. Red interna sin puertos publicados ni salida a Internet. Solo lecturas |
+| **Docker Engine** | Fuente de contenedores, imágenes y versión del motor | — |
 
 ### ¿Por qué dos procesos?
 
@@ -57,14 +57,14 @@ sequenceDiagram
     participant A as Agente
     participant D as Docker / proc / sys
 
-    B->>P: GET /api/metrics y GET /api/containers (cookie de sesión)
+    B->>P: GET /api/metrics, /api/containers, /api/images y /api/docker (cookie de sesión)
     P->>P: ¿sesión válida? (si no: 401 y el navegador se detiene)
-    P->>A: GET /metrics y GET /containers (red interna)
+    P->>A: GET /metrics, /containers, /images y /health (red interna)
     A->>D: /proc/stat (2 lecturas, 0,5 s), meminfo, statvfs, hwmon, /host/net/dev
-    A->>D: containers(all=True)
-    A-->>P: JSON de métricas y de contenedores
+    A->>D: containers(all=True), api.images(), version()
+    A-->>P: JSON de métricas, contenedores, imágenes y estado de Docker
     P-->>B: JSON (Cache-Control: no-store)
-    B->>B: añade la muestra al histórico, pinta indicadores, gráficas y tabla (textContent) y programa la siguiente en 5 s
+    B->>B: pinta KPIs, Docker Details y tablas (textContent) y programa la siguiente en 5 s
 ```
 
 Si el agente falla, el panel responde 502 («El agente no responde»); si Docker falla, el agente
@@ -130,9 +130,10 @@ server-monitoring-service/
 ├── pyproject.toml, uv.lock       Dependencias (extras `panel` y `agent`)
 ├── src/server_monitor/
 │   ├── agent/                    Proceso con acceso a Docker (solo lectura)
-│   │   ├── main.py               API: /health, /metrics, /containers
+│   │   ├── main.py               API: /health, /metrics, /containers, /images
 │   │   ├── host_metrics.py       CPU, RAM, discos, SO, uptime, temperatura, red
 │   │   ├── containers.py         Lista de todos los contenedores
+│   │   ├── images.py             Lista de imágenes y referencias
 │   │   └── config.py             SMS_HOSTFS, SMS_DISKS_DIR, SMS_NET_DEV
 │   └── panel/                    Panel (sin socket Docker)
 │       ├── main.py               App FastAPI, cabeceras de seguridad, estáticos, lectura de APP_PASSWORD
@@ -144,7 +145,7 @@ server-monitoring-service/
 │           ├── index.html, favicon.svg, icons.svg (+ icons-LICENSE.txt)
 │           ├── css/styles.css
 │           ├── fonts/            IBM Plex Sans y Mono (woff2) + OFL.txt
-│           └── js/               api, app, charts, dom, format, history, session
+│           └── js/               api, app, dom, format, session
 │               └── views/        login, dashboard
 ├── deploy/
 │   ├── Dockerfile.agent, Dockerfile.panel
@@ -152,9 +153,9 @@ server-monitoring-service/
 ├── scripts/
 │   ├── export_requirements.sh    uv.lock → deploy/requirements/*.txt
 │   ├── e2e_monitor.sh            Extremo a extremo con Docker real (46 comprobaciones)
-│   └── e2e_ui.py                 Recorrido en navegador con Playwright (22 comprobaciones)
+│   └── e2e_ui.py                 Recorrido en navegador con Playwright (29 comprobaciones)
 ├── tests/
-│   ├── agent/                    Métricas, contenedores, API del agente, integración con Docker
+│   ├── agent/                    Métricas, contenedores, imágenes, API del agente, integración con Docker
 │   └── panel/                    API, autenticación, sesiones, limitador, arranque con APP_PASSWORD
 ├── docs/                         Esta documentación (ver el índice del README)
 └── .github/workflows/ci.yml      ruff + pytest (sin integración)

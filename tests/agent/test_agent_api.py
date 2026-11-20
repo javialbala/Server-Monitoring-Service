@@ -7,7 +7,7 @@ from server_monitor.agent import host_metrics
 def test_only_get_routes(make_client):
     client = make_client(FakeDockerClient())
     routes = [r for r in client.app.routes if isinstance(r, APIRoute)]
-    assert {r.path for r in routes} == {"/health", "/metrics", "/containers"}
+    assert {r.path for r in routes} == {"/health", "/metrics", "/containers", "/images"}
     for route in routes:
         assert route.methods == {"GET"}
 
@@ -57,6 +57,30 @@ def test_containers_only_queries_docker(make_client):
 def test_containers_docker_down_returns_503_without_details(make_client):
     client = make_client(FakeDockerClient(error=OSError("/var/run/docker.sock secreto")))
     response = client.get("/containers")
+    assert response.status_code == 503
+    assert response.json() == {"detail": "Docker no está disponible"}
+
+
+def test_images_only_queries_docker(make_client):
+    raw = [
+        {
+            "Id": "i" * 64,
+            "RepoTags": ["ghcr.io/example/app:latest"],
+            "Created": 1777600000,
+            "Size": 1024,
+            "Containers": 1,
+        }
+    ]
+    docker_client = FakeDockerClient(images=raw)
+    response = make_client(docker_client).get("/images")
+    assert response.status_code == 200
+    assert response.json()["images"][0]["repository"] == "ghcr.io/example/app"
+    assert docker_client.api.calls == [("images", {})]
+
+
+def test_images_docker_down_returns_503_without_details(make_client):
+    client = make_client(FakeDockerClient(error=OSError("/var/run/docker.sock secreto")))
+    response = client.get("/images")
     assert response.status_code == 503
     assert response.json() == {"detail": "Docker no está disponible"}
 

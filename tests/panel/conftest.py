@@ -10,6 +10,14 @@ from server_monitor.panel.security.passwords import hash_password
 PASSWORD = "clave-de-prueba"
 METRICS = {"hostname": "servidor", "cpu": {"percent": 12.5, "cores": 4, "model": None}}
 CONTAINERS = {"collected_at": "2030-01-01T00:00:00Z", "containers": [{"name": "jellyfin"}]}
+IMAGES = {"collected_at": "2030-01-01T00:00:00Z", "images": [{"repository": "nginx"}]}
+DOCKER = {"reachable": True, "server_version": "27.0.1"}
+RESPONSES = {
+    "/metrics": METRICS,
+    "/containers": CONTAINERS,
+    "/images": IMAGES,
+    "/health": {"status": "ok", "docker": DOCKER},
+}
 
 
 class FakeAgent:
@@ -21,9 +29,7 @@ class FakeAgent:
     def __call__(self, request: httpx.Request) -> httpx.Response:
         if self.down:
             return httpx.Response(500)
-        return httpx.Response(
-            200, json={"/metrics": METRICS, "/containers": CONTAINERS}[request.url.path]
-        )
+        return httpx.Response(200, json=RESPONSES[request.url.path])
 
 
 @pytest.fixture

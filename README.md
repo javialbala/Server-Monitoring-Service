@@ -16,11 +16,10 @@ Trabajo de la asignatura *Gestión de Sistemas de Archivos y Servicios Distribui
 
 Un panel web, protegido con una contraseña, que muestra:
 
-- **El servidor anfitrión:** CPU, RAM, uno o varios discos, temperatura general (paquete del
-  procesador), velocidad de red, sistema operativo, kernel, *hostname* y tiempo en marcha, con
-  indicadores y gráficas de los últimos 10 minutos.
-- **Todos los contenedores Docker, en ejecución y detenidos:** nombre, imagen, estado, salud, puertos,
-  fecha de creación y proyecto/servicio de Compose, incluidos los creados fuera de la plataforma.
+- **El servidor anfitrión:** CPU, RAM, disco raíz, sistema operativo, arquitectura, temperatura y
+  tiempo en marcha, resumidos en tarjetas de estado.
+- **Docker:** versión del motor, total de contenedores e imágenes, y tablas con los contenedores (en
+  ejecución y detenidos) y las imágenes de mayor tamaño.
 
 Se actualiza solo cada 5 segundos. **No puede crear, iniciar, parar, borrar ni modificar**
 contenedores, imágenes ni volúmenes.

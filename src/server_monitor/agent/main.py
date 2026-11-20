@@ -1,7 +1,7 @@
 import docker
 from fastapi import FastAPI, HTTPException
 
-from server_monitor.agent import containers, host_metrics
+from server_monitor.agent import containers, host_metrics, images
 from server_monitor.agent.config import AgentSettings
 
 DOCKER_API_VERSION = "1.44"  # Docker Engine 25 o superior
@@ -32,6 +32,14 @@ def create_app(settings: AgentSettings, client: docker.DockerClient) -> FastAPI:
         except Exception:  # noqa: BLE001 - no se filtran detalles internos de Docker
             raise HTTPException(status_code=503, detail="Docker no está disponible") from None
         return {"collected_at": host_metrics.now_iso(), "containers": all_containers}
+
+    @app.get("/images")
+    def list_images() -> dict:
+        try:
+            found_images = images.list_images(client)
+        except Exception:  # noqa: BLE001 - no se filtran detalles internos de Docker
+            raise HTTPException(status_code=503, detail="Docker no está disponible") from None
+        return {"collected_at": host_metrics.now_iso(), "images": found_images}
 
     return app
 

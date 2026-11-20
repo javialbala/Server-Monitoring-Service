@@ -7,18 +7,18 @@ import * as login from "./views/login.js";
 import * as dashboard from "./views/dashboard.js";
 
 const root = document.getElementById("view");
-const header = document.getElementById("app-header");
+const sidebar = document.getElementById("sidebar");
 let stopDashboard = null;
 
 function showLogin() {
   if (stopDashboard) { stopDashboard(); stopDashboard = null; }
-  header.hidden = true;
+  sidebar.hidden = true;
   clear(root);
   login.render(root, showDashboard);
 }
 
 function showDashboard() {
-  header.hidden = false;
+  sidebar.hidden = false;
   clear(root);
   stopDashboard = dashboard.render(root);
 }
@@ -42,6 +42,7 @@ document.getElementById("logout").addEventListener("click", async () => {
   try {
     await session.load();
   } catch (e) {
+    sidebar.hidden = true;
     root.append(el("div", { className: "login-screen" },
       el("p", { className: "banner", text: errorMessage(e), attrs: { role: "alert" } })));
     return;

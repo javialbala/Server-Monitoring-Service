@@ -4,33 +4,119 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
-  <title>Server Monitoring Service</title>
+  <title>Arcane · Server Monitoring Service</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="preload" href="/fonts/ibm-plex-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="preload" href="/fonts/ibm-plex-mono-latin-500-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/fonts/ibm-plex-sans-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/css/styles.css">
 </head>
 <body>
-  <header id="app-header" class="topbar" hidden>
-    <div class="topbar-inner">
-      <div class="brand">
-        <svg class="brand-mark" aria-hidden="true"><use href="/icons.svg#logo"></use></svg>
-        <span class="brand-name">Server Monitoring Service</span>
-        <span id="host-name" class="brand-host"></span>
+  <aside id="sidebar" class="sidebar" hidden>
+    <div class="sidebar-brand">
+      <span class="brand-mark" aria-hidden="true">A</span>
+      <div class="brand-copy">
+        <p class="brand-name">Arcane</p>
+        <p class="brand-version">v1.0.2</p>
       </div>
-      <div class="topbar-status">
+    </div>
+
+    <div class="sidebar-section">
+      <p class="sidebar-label">Environment</p>
+      <div class="env-select">
+        <span class="env-icon" aria-hidden="true">
+          <svg class="icon"><use href="/icons.svg#server"></use></svg>
+        </span>
+        <span class="env-copy">
+          <span class="env-name">Local Docker</span>
+          <span class="env-path" title="unix:///var/run/docker.sock">unix:///var/run/docker.sock</span>
+        </span>
+        <svg class="icon env-chevrons" aria-hidden="true"><use href="/icons.svg#chevrons-up-down"></use></svg>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav" aria-label="Navegación principal">
+      <div class="nav-group">
+        <p class="sidebar-label">Management</p>
+        <a class="nav-item is-active" href="#overview" data-nav="dashboard">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#layout-dashboard"></use></svg>
+          <span>Dashboard</span>
+        </a>
+        <a class="nav-item" href="#containers-panel" data-nav="containers">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#box"></use></svg>
+          <span>Containers</span>
+        </a>
+        <span class="nav-item is-disabled" aria-disabled="true">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#layers"></use></svg>
+          <span>Compose Projects</span>
+        </span>
+        <a class="nav-item" href="#images-panel" data-nav="images">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#image"></use></svg>
+          <span>Images</span>
+        </a>
+        <span class="nav-item is-disabled" aria-disabled="true">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#network"></use></svg>
+          <span>Networks</span>
+        </span>
+        <span class="nav-item is-disabled" aria-disabled="true">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#database"></use></svg>
+          <span>Volumes</span>
+        </span>
+      </div>
+
+      <div class="nav-group">
+        <p class="sidebar-label">Customization</p>
+        <span class="nav-item is-disabled" aria-disabled="true">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#palette"></use></svg>
+          <span>Template Settings</span>
+        </span>
+        <span class="nav-item is-disabled" aria-disabled="true">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#package"></use></svg>
+          <span>Container Registries</span>
+        </span>
+      </div>
+
+      <div class="nav-group">
+        <p class="sidebar-label">Environments</p>
+        <span class="nav-item is-disabled" aria-disabled="true">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#globe"></use></svg>
+          <span>Environment Management</span>
+        </span>
+      </div>
+
+      <div class="nav-group">
+        <p class="sidebar-label">Administration</p>
+        <span class="nav-item is-disabled" aria-disabled="true">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#scroll-text"></use></svg>
+          <span>Event Log</span>
+        </span>
+        <span class="nav-item is-disabled" aria-disabled="true">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#settings"></use></svg>
+          <span>Settings</span>
+          <svg class="icon nav-chevron" aria-hidden="true"><use href="/icons.svg#chevron-right"></use></svg>
+        </span>
+      </div>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="connection">
         <span id="link-state" class="link-state" data-state="pending">
           <span class="link-dot" aria-hidden="true"></span>
           <span id="link-text">Conectando…</span>
         </span>
-        <span id="last-update" class="last-update" role="status">Última actualización —</span>
-        <button type="button" id="logout" class="btn btn-ghost">
+        <span id="last-update" class="last-update" role="status">—</span>
+      </div>
+      <div class="user-row">
+        <span class="avatar" aria-hidden="true">
+          <svg class="icon"><use href="/icons.svg#user"></use></svg>
+        </span>
+        <span class="user-name">Administrador</span>
+        <button type="button" id="logout" class="icon-button" aria-label="Cerrar sesión" title="Cerrar sesión">
           <svg class="icon" aria-hidden="true"><use href="/icons.svg#log-out"></use></svg>
-          <span>Cerrar sesión</span>
         </button>
       </div>
     </div>
-  </header>
+  </aside>
+
   <main id="view" tabindex="-1"></main>
   <noscript><p class="noscript">Server Monitoring Service necesita JavaScript para funcionar.</p></noscript>
   <script type="module" src="/js/app.js"></script>

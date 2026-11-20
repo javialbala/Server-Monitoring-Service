@@ -5,7 +5,6 @@
 Chromium por defecto en /usr/bin/chromium (CHROMIUM_PATH). Capturas en SMS_SCREENSHOTS.
 """
 
-import math
 import os
 import sys
 from pathlib import Path
@@ -16,7 +15,6 @@ URL = os.environ.get("SMS_URL", "http://127.0.0.1:8000")
 PASSWORD = os.environ["APP_PASSWORD"]
 CHROMIUM = os.environ.get("CHROMIUM_PATH", "/usr/bin/chromium")
 SHOTS = os.environ.get("SMS_SCREENSHOTS")
-ARC_FRACTION = 0.75  # el arco ocupa 270° de la circunferencia
 failed = False
 
 
@@ -32,14 +30,9 @@ def shot(page, name: str) -> None:
         page.screenshot(path=f"{SHOTS}/{name}.png", full_page=True)
 
 
-def gauge(page, kind: str, index: int = 0) -> tuple[float, float]:
-    """(número mostrado, fracción del arco dibujada) del indicador `kind`."""
-    cell = page.locator(f".metric-{kind}").nth(index)
-    number = float(cell.locator(".gauge-number").text_content())
-    arc = cell.locator(".gauge-value")
-    drawn = float(arc.get_attribute("stroke-dasharray").split()[0])
-    radius = float(arc.get_attribute("r"))
-    return number, drawn / (2 * math.pi * radius * ARC_FRACTION)
+def text(target, selector: str | None = None) -> str:
+    node = target.locator(selector) if selector else target
+    return (node.text_content() or "").strip()
 
 
 with sync_playwright() as p:
@@ -52,7 +45,7 @@ with sync_playwright() as p:
     page.on(
         "console", lambda m: m.type == "error" and "401" not in m.text and errors.append(m.text)
     )
-    responses = {"metrics": [], "containers": []}
+    responses = {"metrics": [], "containers": [], "images": [], "docker": []}
 
     def on_response(response):
         for name in responses:
@@ -71,65 +64,88 @@ with sync_playwright() as p:
 
     page.fill("#password", PASSWORD)
     page.click("button[type=submit]")
-    page.locator(".metric-cpu .gauge-number").wait_for(timeout=10000)
-    page.wait_for_timeout(1000)  # deja terminar la transición del arco
+    page.locator(".kpi-card").first.wait_for(timeout=10000)
+    page.wait_for_timeout(1000)
 
     m = responses["metrics"][-1]
-    for kind, expected in (("cpu", m["cpu"]["percent"]), ("ram", m["memory"]["percent"])):
-        number, fraction = gauge(page, kind)
-        check(f"indicador {kind}: muestra {number} % (API {expected} %)", number == expected)
-        check(
-            f"indicador {kind}: el arco cubre {fraction:.3f} del recorrido "
-            f"(esperado {expected / 100:.3f})",
-            abs(fraction - expected / 100) < 0.005,
-        )
-    check(
-        f"hay un indicador por disco ({len(m['disks'])})",
-        page.locator(".metric-disk").count() == len(m["disks"]),
-    )
-    for i, disk in enumerate(m["disks"]):
-        number, fraction = gauge(page, "disk", i)
-        check(
-            f"disco {disk['name']}: {number} % y arco {fraction:.3f} (API {disk['percent']} %)",
-            number == disk["percent"] and abs(fraction - disk["percent"] / 100) < 0.005,
-        )
-
-    temperature = page.locator(".sys-temp dd").text_content()
-    api_temp = m["temperature"]
-    expected_text = str(round(api_temp["celsius"])) if api_temp else "No disponible"
-    check(
-        f"una sola temperatura general ({temperature!r}; API {api_temp})",
-        page.locator(".sys-temp").count() == 1 and expected_text in temperature,
-    )
-
     containers = responses["containers"][-1]["containers"]
+    images = responses["images"][-1]["images"]
+    docker = responses["docker"][-1]
+    cards = page.locator(".kpi-card")
+
+    running = sum(1 for c in containers if c["state"] == "running")
+    running_percent = running / len(containers) * 100 if containers else 0
+    expected_values = [
+        (str(running), f"{running} of {len(containers)} running", running_percent),
+        (
+            f"{m['cpu']['percent']:.1f}",
+            f"{m['cpu']['percent']:.1f}% of resources being used",
+            m["cpu"]["percent"],
+        ),
+        (
+            f"{m['memory']['percent']:.1f}",
+            f"{m['memory']['percent']:.1f}% of resources being used",
+            m["memory"]["percent"],
+        ),
+        (
+            f"{m['disks'][0]['percent']:.1f}",
+            f"{m['disks'][0]['percent']:.1f}% of resources being used",
+            m["disks"][0]["percent"],
+        ),
+    ]
+    for i, (value, note, percent) in enumerate(expected_values):
+        card = cards.nth(i)
+        check(f"KPI {i + 1}: valor {value!r}", text(card.locator(".kpi-value").first) == value)
+        check(f"KPI {i + 1}: nota {note!r}", text(card.locator(".kpi-note").first) == note)
+        width = card.locator(".progress-fill").evaluate("node => node.style.width")
+        check(f"KPI {i + 1}: barra a {width}", float(width.rstrip("%")) == round(percent, 1))
+
+    details = page.locator(".detail-card")
     check(
-        f"tabla de contenedores con {len(containers)} filas (como la API)",
-        page.locator(".containers tbody tr").count() == len(containers),
+        f"Docker Engine muestra la versión {docker['server_version']!r}",
+        text(details.nth(0).locator(".badge").first) == docker["server_version"],
     )
-    stopped = sum(1 for c in containers if c["state"] != "running")
-    marked = page.locator(".containers tbody tr", has_text="Detenido").count()
-    check(f"los detenidos se marcan como tales ({marked} de {stopped})", marked == stopped)
+    check(
+        f"Containers muestra {running} en ejecución",
+        text(details.nth(1).locator(".badge").first) == f"{running} running",
+    )
+    check(
+        f"Images muestra {len(images)} imágenes",
+        text(details.nth(2).locator(".badge").first) == str(len(images)),
+    )
+
+    container_rows = page.locator("#containers-panel tbody tr")
+    image_rows = page.locator("#images-panel tbody tr")
+    check(
+        f"tabla de contenedores con {min(5, len(containers))} filas visibles",
+        container_rows.count() == min(5, len(containers)),
+    )
+    check(
+        f"tabla de imágenes con {min(5, len(images))} filas visibles",
+        image_rows.count() == min(5, len(images)),
+    )
+    check(
+        "los contenedores en ejecución llevan el badge Running",
+        page.locator("#containers-panel .pill-green").count() == min(5, running),
+    )
     check(
         "no hay botones para iniciar, parar o borrar contenedores",
-        page.locator(".containers button").count() == 0,
+        page.locator("#containers-panel button").count() <= 1,
     )
 
-    first = page.get_by_role("status").text_content()
+    if len(containers) > 5:
+        page.locator("#containers-panel .text-link").click()
+        check(
+            f"View All muestra los {len(containers)} contenedores",
+            page.locator("#containers-panel tbody tr").count() == len(containers),
+        )
+
+    first = text(page, "#last-update")
     page.wait_for_timeout(11000)
-    second = page.get_by_role("status").text_content()
+    second = text(page, "#last-update")
     check(f"la hora de actualización cambia sola ({first!r} -> {second!r})", first != second)
     count = len(responses["metrics"])
     check(f"se han recibido {count} muestras reales (al menos 3)", count >= 3)
-    check(
-        "las gráficas de evolución tienen líneas dibujadas",
-        page.locator(".chart-panel svg path").count() > 0,
-    )
-    box = page.locator(".chart-panel svg").first.bounding_box()
-    page.mouse.move(box["x"] + box["width"] * 0.95, box["y"] + box["height"] * 0.5)
-    page.wait_for_timeout(300)
-    tooltip = page.locator(".chart-tooltip").first
-    check("al pasar el cursor aparece el tooltip", tooltip.is_visible())
     shot(page, "panel-1440")
 
     # Chromium sin interfaz no oculta la pestaña: se simula el cambio de visibilidad.

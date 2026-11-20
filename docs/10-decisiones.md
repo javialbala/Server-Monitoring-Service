@@ -85,8 +85,8 @@ páginas `/docs` y `/redoc` están desactivadas porque cargan recursos de un CDN
 panel. Sin cadena de compilación ni `node_modules`; cualquier miembro del equipo puede leerlo. Un
 módulo JS por vista y un cliente de API común.
 
-**Revisión (2026-11-16).** El plan inicial incluía Chart.js para las gráficas; se sustituyó por SVG
-propio (ADR-047), de modo que el panel no tiene ninguna librería de JavaScript.
+**Revisión (2026-11-17).** El plan inicial incluía Chart.js; el rediseño Arcane eliminó las gráficas
+(ADR-047), de modo que el panel no tiene ninguna librería de JavaScript.
 
 **Consecuencias.** Hay que ser disciplinados con la estructura y con el escape de datos (XSS): todo
 dato del servidor se inserta con `textContent`, nunca con `innerHTML`.
@@ -376,22 +376,19 @@ red es `null` y la interfaz oculta la gráfica de red.
 
 **Estado:** Aceptada. Revisa ADR-006.
 
-**Contexto.** El panel necesita indicadores circulares y gráficas de evolución. Y no puede cargar
-nada de un CDN (CSP `default-src 'self'`).
+**Contexto.** El rediseño Arcane sustituyó las gráficas de evolución por KPIs y tablas. El panel sigue
+sin poder cargar nada de un CDN (CSP `default-src 'self'`).
 
-**Alternativas.** (a) Chart.js u otra librería (una dependencia más que mantener y que adaptar a la paleta y a
-la CSP). (b) SVG dibujado a mano con JavaScript. Histórico: (c) en una base
-de datos del servidor; (d) solo en memoria del navegador.
+**Alternativas.** (a) Chart.js u otra librería para mantener las gráficas (una dependencia más que
+adaptar a la paleta y a la CSP). (b) Eliminar las gráficas y mostrar solo el valor actual en tarjetas.
 
-**Decisión.** (b) y (d). `js/charts.js` dibuja el indicador (círculo con `stroke-dasharray`) y la
-gráfica de líneas (ejes, rejilla, tooltip, cortes por huecos); `js/history.js` guarda hasta 120
-muestras (10 min a una cada 5 s) en la memoria de la pestaña. Al recargar, el histórico empieza de
-cero. El servidor no almacena métricas (coherente con ADR-039).
+**Decisión.** (b). La pantalla muestra contenedores, CPU, RAM, disco, versión de Docker e imágenes con
+el último dato recibido; no hay series temporales ni histórico en el navegador. El servidor tampoco
+almacena métricas (coherente con ADR-039).
 
-**Consecuencias.** Cero dependencias nuevas y control total del aspecto. A cambio, hay que mantener el
-código de las gráficas (216 líneas) y el histórico no sobrevive a recargar ni se comparte entre
-pestañas. Limitación: el tooltip no es accesible por teclado (los valores actuales están en la
-leyenda).
+**Consecuencias.** Cero dependencias nuevas, menos código que mantener y una lectura más directa del
+estado. A cambio, se pierde la evolución temporal y no se puede ver si un valor sube o baja. Las
+tarjetas se actualizan cada 5 s mientras la pestaña está visible.
 
 ### ADR-048 · Fuentes e iconos autoalojados por la CSP
 
@@ -407,10 +404,10 @@ externos para mostrarse.
 **Decisión.** Opción (c). Tipografía **IBM Plex Sans** (400/500/600) e **IBM Plex Mono** (400/500)
 en `woff2` latino, de los paquetes `@fontsource/ibm-plex-sans@5.2.8` y
 `@fontsource/ibm-plex-mono@5.2.7` (licencia SIL OFL 1.1, © IBM Corp.; texto en `web/fonts/OFL.txt`).
-18 iconos de **Lucide** (`lucide-static@1.68.0`, licencia ISC; texto en `web/icons-LICENSE.txt`)
-reunidos en un *sprite* `web/icons.svg`, junto con la marca propia (arco de 270°, también el favicon).
-Son recursos estáticos, **no** dependencias del proyecto: se copian al repositorio y no hay
-instalación ni paso de compilación.
+28 iconos de **Lucide** (`lucide-static@1.68.0`, licencia ISC; texto en `web/icons-LICENSE.txt`)
+reunidos en un *sprite* `web/icons.svg` (conserva algunos sin uso), junto con la marca propia: la letra
+«A» del panel y del favicon. Son recursos estáticos, **no** dependencias del proyecto: se copian al
+repositorio y no hay instalación ni paso de compilación.
 
 **Consecuencias.** La CSP no cambia. Las licencias se citan en [bibliografia.md](bibliografia.md).
 Actualizar una fuente o un icono es una operación manual.

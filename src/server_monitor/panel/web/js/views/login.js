@@ -8,8 +8,10 @@ export function render(root, onLogin) {
   const card = el("section", { className: "login-card", attrs: { "aria-labelledby": "login-title" } });
   card.append(
     el("div", { className: "login-brand" },
-      icon("logo", "login-mark"),
-      el("p", { className: "login-product", text: "Server Monitoring Service" })),
+      el("span", { className: "login-mark", text: "A" }),
+      el("div", {},
+        el("p", { className: "login-product", text: "Arcane" }),
+        el("p", { className: "login-subtitle", text: "Server Monitoring Service" }))),
     el("h1", { className: "login-title", text: "Iniciar sesión", attrs: { id: "login-title" } }),
     el("p", { className: "login-hint", text: "Introduce la contraseña del panel para ver el estado del servidor." }),
   );

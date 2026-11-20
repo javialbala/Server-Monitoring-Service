@@ -268,9 +268,11 @@ sequenceDiagram
     P-->>B: el mismo JSON
 ```
 
-El navegador lanza las dos consultas a la vez (`Promise.all`). Errores: si el agente no responde o falla,
-el panel contesta 502 `El agente no responde`; si es Docker quien falla, el agente contesta 503 y el
-panel lo reenvía como 502.
+El navegador lanza las cuatro consultas a la vez (`Promise.all`): métricas y contenedores son
+obligatorias; imágenes y versión de Docker son opcionales y, si fallan, se ignoran sin romper el panel.
+Para las imágenes el panel llama a `/images` y para la versión a `/health` (del que extrae el objeto
+`docker`). Errores: si el agente no responde o falla, el panel contesta 502 `El agente no responde`; si
+es Docker quien falla, el agente contesta 503 y el panel lo reenvía como 502.
 
 ### Logout
 
@@ -296,11 +298,12 @@ Es el navegador quien consulta; el servidor no empuja nada (ADR-041).
 - Con la pestaña oculta (`document.hidden`) no se programa ninguna; al volver (`visibilitychange`) se
   actualiza al instante y se reanuda el ciclo.
 - Al cerrar sesión o al recibir 401 se llama a la función de parada devuelta por `render`.
-- Si falla cualquiera de las dos consultas, **no se actualiza nada** (los datos mostrados son siempre
-  coherentes entre sí) y aparece el aviso con el motivo (agente sin respuesta, sin conexión...).
-- El histórico para las gráficas vive solo en la memoria de la pestaña: `history.js` guarda como máximo
-  120 muestras (10 minutos) y descarta las más antiguas. Al recargar empieza de cero. El servidor no
-  guarda métricas.
+- Si falla `/api/metrics` o `/api/containers`, **no se actualiza nada** (los datos mostrados son
+  siempre coherentes entre sí) y aparece el aviso con el motivo (agente sin respuesta, sin conexión...).
+  Si solo fallan `/api/images` o `/api/docker`, el resto se actualiza y esas tarjetas muestran `—` o
+  «No data available».
+- El panel no guarda histórico: cada refresco sustituye los valores por los de la última muestra. Las
+  gráficas de evolución se eliminaron en el rediseño Arcane. El servidor no guarda métricas.
 
 ## 4.6 Cómo se comunican el panel y el agente
 

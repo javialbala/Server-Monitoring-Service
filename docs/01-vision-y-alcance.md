@@ -16,11 +16,10 @@ estado del servidor y de todos sus contenedores.
 Construir **Server Monitoring Service**: una plataforma web ligera de **monitorización y consulta**
 que muestra, tras iniciar sesión:
 
-1. **Métricas del servidor anfitrión:** CPU, RAM, uno o varios discos, temperatura general (paquete del
-   procesador), red (velocidad de bajada y subida), sistema operativo, kernel, *hostname* y tiempo en
-   marcha, con indicadores y gráficas de la evolución de los últimos 10 minutos.
-2. **Todos los contenedores Docker, en ejecución y detenidos:** nombre, imagen, estado, salud, puertos,
-   fecha de creación y proyecto/servicio de Docker Compose, **incluidos los creados fuera de la
+1. **Métricas del servidor anfitrión:** CPU, RAM, disco raíz, sistema operativo, arquitectura,
+   temperatura y tiempo en marcha, resumidos en tarjetas de estado.
+2. **Docker:** versión del motor, total de contenedores e imágenes, y tablas con los contenedores (en
+   ejecución y detenidos) y las imágenes de mayor tamaño, **incluidos los creados fuera de la
    plataforma**.
 
 La plataforma es **solo de lectura**: no crea, inicia, para, borra ni modifica contenedores, imágenes
@@ -36,7 +35,7 @@ explicado y demostrado por el equipo.
 | Acceso | Inicio de sesión con una contraseña única, cierre de sesión, caducidad de sesión |
 | Métricas del anfitrión | CPU (%, núcleos, modelo), RAM, disco raíz y discos extra declarados por el administrador, temperatura general, red, SO, kernel, arquitectura, *hostname*, uptime |
 | Contenedores | Lista de **todos**: nombre, imagen, estado, salud, puertos, creación, proyecto y servicio de Compose |
-| Gráficas | Evolución de CPU, RAM y red de los últimos 10 minutos, en el navegador |
+| Docker | Versión del motor, total de contenedores e imágenes, y tablas de contenedores e imágenes |
 | Actualización | Consulta automática cada 5 s, con pausa si la pestaña no está visible |
 | Seguridad | Agente de solo lectura aislado en una red interna, Argon2id, límite de intentos, CSRF, CSP |
 
@@ -101,10 +100,11 @@ Siguientes pasos recomendados (propuestos, no aprobados):
 
 | Paso | Contenido | Criterio de aceptación |
 |---|---|---|
-| **A. Cierre de pendientes de la fase actual** | Instalar desde un clon limpio siguiendo el README; comprobar la ventana de 10 minutos llena en el navegador | Resultados anotados en [07-pruebas.md](07-pruebas.md) |
+| **A. Cierre de pendientes de la fase actual** | Instalar desde un clon limpio siguiendo el README; comprobar la interfaz Arcane y los nuevos endpoints en el navegador | Resultados anotados en [07-pruebas.md](07-pruebas.md) |
 | **B. Despliegue en el servidor Ubuntu real** (solo con autorización expresa) | Probar antes en Ubuntu o una VM; decidir HTTPS y `SMS_COOKIE_SECURE`; medir consumo (la guía de instalación ya está en el README) | Funciona sin afectar a los servicios existentes; consumo medido |
 | **C. Cierre académico** | Memoria, presentación y cuestionario de la asignatura | Documentación completa |
 
 Posibles mejoras posteriores, no planificadas: proxy del socket de Docker que solo permita lecturas,
-tema claro, tooltip accesible por teclado, historial de métricas persistente, sesiones compartidas
-entre procesos. Cualquier cambio de alcance requiere aprobación del usuario.
+tema claro, selector de entorno funcional, navegación real entre secciones, historial de métricas
+persistente, sesiones compartidas entre procesos. Cualquier cambio de alcance requiere aprobación del
+usuario.

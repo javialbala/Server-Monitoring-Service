@@ -1,6 +1,6 @@
-from conftest import CONTAINERS, METRICS
+from conftest import CONTAINERS, DOCKER, IMAGES, METRICS
 
-PROTECTED = ["/api/metrics", "/api/containers"]
+PROTECTED = ["/api/metrics", "/api/containers", "/api/images", "/api/docker"]
 
 
 def test_health_is_public(client):
@@ -15,6 +15,8 @@ def test_data_routes_require_session(client):
 def test_data_routes_forward_agent_json(client, csrf):
     assert client.get("/api/metrics").json() == METRICS
     assert client.get("/api/containers").json() == CONTAINERS
+    assert client.get("/api/images").json() == IMAGES
+    assert client.get("/api/docker").json() == DOCKER
 
 
 def test_agent_failure_is_502(client, csrf, agent):

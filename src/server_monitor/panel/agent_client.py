@@ -34,5 +34,13 @@ class AgentClient:
     async def containers(self) -> dict:
         return await self._get("/containers")
 
+    async def images(self) -> dict:
+        return await self._get("/images")
+
+    async def docker(self) -> dict:
+        health = await self._get("/health")
+        docker = health.get("docker") if isinstance(health, dict) else None
+        return docker if isinstance(docker, dict) else {"reachable": False, "server_version": None}
+
     async def aclose(self) -> None:
         await self._client.aclose()

@@ -163,7 +163,7 @@ contraseña:
 
 ```bash
 SMS_URL=http://127.0.0.1:8000 APP_PASSWORD='<tu contraseña>' SMS_SCREENSHOTS=/ruta/capturas \
-    uvx --with playwright python scripts/e2e_ui.py       # 22 comprobaciones
+    uvx --with playwright python scripts/e2e_ui.py       # 29 comprobaciones
 ```
 
 `SMS_SCREENSHOTS` es opcional (guarda capturas). Para no tocar tu entorno de desarrollo se puede usar un
@@ -262,4 +262,4 @@ El CI falla si `deploy/requirements/` no coincide con `uv.lock`.
 | «Demasiados intentos fallidos» al iniciar sesión | 5 fallos en 15 minutos desde esa IP | Espera a que pase la ventana o reinicia el panel (el contador está en memoria) |
 | `ModuleNotFoundError: argon2` o `docker` al ejecutar los tests | Se instaló el entorno sin extras | `uv sync --all-extras` |
 | Hay que volver a entrar tras reiniciar | Las sesiones están en memoria | Es lo esperado (ADR-039) |
-| Las gráficas empiezan vacías tras recargar | El histórico vive en la memoria del navegador | Es lo esperado (ADR-047) |
+| La versión de Docker muestra «—» | El agente no responde a `/health` o Docker no está accesible | Comprueba el estado de conexión y el aviso del panel |

@@ -52,7 +52,7 @@
 | RF-M30 | Los datos se actualizan solos cada 5 s. | M | Verificado (navegador) |
 | RF-M31 | La actualización se pausa con la pestaña oculta, se reanuda al volver y se detiene al cerrar sesión o con un 401. | S | Verificado (navegador; la pestaña oculta se simula con `visibilitychange`) |
 | RF-M32 | Si el agente o Docker fallan, el panel lo indica con un estado de conexión y un mensaje comprensible, conservando los últimos datos. | S | Parcial: 502/503 verificados en tests de API; el aviso de la interfaz no se ha probado en navegador |
-| RF-M33 | Mostrar la evolución de CPU, RAM y red de los últimos 10 minutos en gráficas dibujadas en el navegador, con tooltip y cortes cuando faltan muestras. | S | Parcial: líneas, ≥ 3 muestras reales y tooltip con ratón verificados; el desplazamiento con la ventana llena (10 min) y el uso táctil **no probados** |
+| RF-M33 | Mostrar la versión de Docker, el total de contenedores (en ejecución y detenidos) y el número de imágenes, junto a las tablas de contenedores e imágenes. | S | Verificado (navegador y API) |
 
 ### Solo lectura
 
@@ -78,7 +78,7 @@
 | RNF-M12 | Portabilidad | Funciona con `docker compose up -d --build` en Linux con Docker Engine 25 o superior (API 1.44). | Probado en CachyOS; **no** en Ubuntu | Parcial |
 | RNF-M13 | Aislamiento del entorno | El desarrollo y las pruebas no tocan el servidor real. | Procedimiento | Cumplido |
 | RNF-M14 | Usabilidad | Interfaz clara, adaptable a pantallas estrechas (sin scroll horizontal a 1024 y 390 px), con mensajes de error en español. | Navegador (`e2e_ui.py`) | Verificado en 1024 y 390 px |
-| RNF-M15 | Accesibilidad | Estado nunca solo por color, foco visible, `prefers-reduced-motion`; información de las gráficas disponible también como texto. | Revisión del CSS y JS | Parcial: implementado y revisado; el **tooltip no es accesible por teclado** (los valores actuales están en la leyenda) y no hay auditoría automática |
+| RNF-M15 | Accesibilidad | Estado nunca solo por color, foco visible, `prefers-reduced-motion`; los valores numéricos y los estados se muestran también como texto. | Revisión del CSS y JS | Parcial: implementado y revisado; no hay auditoría automática |
 
 ## 2.3 Requisitos retirados de la etapa PaaS
 

@@ -12,7 +12,7 @@
 
 | Herramienta | Idea | Diferencia con este proyecto |
 |---|---|---|
-| **Netdata** | Agente de monitorización en tiempo real con muchísimas métricas, gráficas e historial | Mucho más completo y complejo; este proyecto muestra pocas métricas, con un histórico de 10 min solo en el navegador |
+| **Netdata** | Agente de monitorización en tiempo real con muchísimas métricas, gráficas e historial | Mucho más completo y complejo; este proyecto muestra pocas métricas y solo el último valor, sin histórico |
 | **Glances** | Monitor del sistema escrito en Python, con interfaz de terminal y modo web | Similar en espíritu; no está pensado para separar el proceso expuesto del acceso a Docker ni para tener inicio de sesión propio |
 | **cAdvisor** | Recoge el uso de recursos de los contenedores (de Google) | Se centra en métricas por contenedor; aquí solo se listan los contenedores (con su estado) y se muestra el estado del anfitrión |
 | **Prometheus + node_exporter** | `node_exporter` expone métricas del anfitrión que Prometheus recoge y almacena | Estándar profesional con historial y alertas, pero requiere varios componentes; el montaje `/hostfs` de este proyecto se inspira en el de `node_exporter`, más restringido (sin submontajes) |

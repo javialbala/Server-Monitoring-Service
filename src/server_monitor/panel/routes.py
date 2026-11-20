@@ -116,3 +116,19 @@ async def containers(request: Request) -> dict:
         return await request.app.state.agent_client.containers()
     except AgentError:
         raise HTTPException(502, "El agente no responde") from None
+
+
+@router.get("/images", dependencies=[Depends(require_session)])
+async def images(request: Request) -> dict:
+    try:
+        return await request.app.state.agent_client.images()
+    except AgentError:
+        raise HTTPException(502, "El agente no responde") from None
+
+
+@router.get("/docker", dependencies=[Depends(require_session)])
+async def docker(request: Request) -> dict:
+    try:
+        return await request.app.state.agent_client.docker()
+    except AgentError:
+        raise HTTPException(502, "El agente no responde") from None

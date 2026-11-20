@@ -1,6 +1,6 @@
 # 5. API
 
-> Estado: **implementado y probado** (contrato v2, 2026-11-16): `tests/panel`, `tests/agent`,
+> Estado: **implementado y probado** (contrato v3, 2026-11-17): `tests/panel`, `tests/agent`,
 > `scripts/e2e_monitor.sh` y `scripts/e2e_ui.py`. Los valores de los ejemplos son ilustrativos.
 > Implementación en [04-backend.md](04-backend.md).
 
@@ -32,6 +32,8 @@ Ninguna tiene `/docs`, `/redoc` ni `/openapi.json`. No existe ninguna ruta que m
 | `POST /api/logout` | sesión + CSRF | 204 · 401 sin sesión · 403 sin token CSRF o `Origin` ajeno |
 | `GET /api/metrics` | sesión | 200 (JSON del agente, tal cual) · 401 `Sesión no iniciada o caducada` · 502 `El agente no responde` |
 | `GET /api/containers` | sesión | 200 (JSON del agente, tal cual) · 401 · 502 `El agente no responde` |
+| `GET /api/images` | sesión | 200 (JSON del agente, tal cual) · 401 · 502 `El agente no responde` |
+| `GET /api/docker` | sesión | 200 `{"reachable": bool, "server_version": str \| null}` · 401 · 502 `El agente no responde` |
 
 Cuerpo de `POST /api/login`: `{"password": "..."}` (1 a 128 caracteres; la contraseña no se recorta;
 cualquier otro campo da 422). Tras 5 fallos en 15 minutos desde una IP se responde 429 aunque la
@@ -138,6 +140,31 @@ Los campos `disk` (singular) y `temperatures` (lista) de la versión anterior **
 Se listan **todos** los contenedores (en marcha y detenidos) con una sola llamada de lectura a
 Docker. Si Docker no responde: 503 `{"detail": "Docker no está disponible"}`.
 
+### `GET /images`
+
+```json
+{
+  "collected_at": "2026-11-16T10:00:00.789Z",
+  "images": [
+    {"id": "abc123def456", "repository": "jellyfin/jellyfin", "tag": "latest",
+     "size_bytes": 1890000000, "created_at": "2026-11-01T08:00:00Z", "in_use": true},
+    {"id": "0f9e8d7c6b5a", "repository": "<none>", "tag": "<none>",
+     "size_bytes": 642300000, "created_at": null, "in_use": false}
+  ]
+}
+```
+
+| Campo | Significado |
+|---|---|
+| `id` | Identificador de la imagen, primeros 12 caracteres |
+| `repository`, `tag` | Referencia separada por el último `:` después del último `/`; si no hay etiqueta, `latest`. Un digest (`@sha256:...`) se conserva como etiqueta. Una imagen sin nombre usa `<none>` en ambos |
+| `size_bytes` | Tamaño en bytes |
+| `created_at` | Fecha de creación en UTC, o `null` si Docker no la da |
+| `in_use` | `true` si Docker indica que algún contenedor la usa |
+
+**Orden:** tamaño descendente; a igualdad, por repositorio y etiqueta. Si Docker no responde: 503
+`{"detail": "Docker no está disponible"}`.
+
 ## 5.3 Ejemplo con `curl` (panel)
 
 ```bash
@@ -146,6 +173,8 @@ curl -s -c cookies.txt -H 'Content-Type: application/json' \
      -d '{"password":"<tu contraseña>"}' $B/api/login -i       # 204 + cookie
 curl -s -b cookies.txt $B/api/metrics
 curl -s -b cookies.txt $B/api/containers
+curl -s -b cookies.txt $B/api/images
+curl -s -b cookies.txt $B/api/docker
 ```
 
 (Escribir la contraseña en la línea de órdenes la deja en el historial de la shell; en el panel no
